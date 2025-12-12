@@ -208,16 +208,6 @@ See [INSTALLATION.md](docs/getting-started/INSTALLATION.md) for detailed install
 
 ---
 
-## Version History
-
-- **v6.3** (2025-12-11) - Fixed JSONL parsing in report generation
-- **v6.2** (2025-12-11) - Implemented true parallel execution
-- **v6.1** (2025-12-11) - Fixed IP address field mapping
-- **v6.0** (2025-12-11) - IP-centric architecture with WAF-safe scanning
-- **v2.0** (2025-12-05) - Added Phase 2 with technology fingerprinting
-- **v1.0** (2025-12-03) - Initial release with Phase 1
-
----
 
 ## License
 
