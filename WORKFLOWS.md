@@ -43,27 +43,27 @@ Reconductor uses a multi-phase n8n workflow architecture to perform comprehensiv
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    PHASE 1: DISCOVERY                        │
-│  ┌──────────┐    ┌──────────┐    ┌──────────────────────┐  │
-│  │ Webhook  │───▶│ Subfinder│───▶│ crt.sh SSL Cert Logs │  │
-│  │ Trigger  │    │  Search  │    │                      │  │
-│  └──────────┘    └──────────┘    └──────────────────────┘  │
-│                          │                                   │
-│                          ▼                                   │
-│              ┌───────────────────────┐                       │
-│              │ Deduplicate Subdomains│                       │
-│              └───────────────────────┘                       │
-└──────────────────────────┬───────────────────────────────────┘
+│                    PHASE 1: DISCOVERY                       │
+│  ┌──────────┐    ┌──────────┐    ┌──────────────────────┐   │
+│  │ Webhook  │───▶│ Subfinder│───▶│ crt.sh SSL Cert Logs│   │
+│  │ Trigger  │    │  Search  │    │                      │   │
+│  └──────────┘    └──────────┘    └──────────────────────┘   │
+│                          │                                  │
+│                          ▼                                  │
+│              ┌───────────────────────┐                      │
+│              │ Deduplicate Subdomains│                      │
+│              └───────────────────────┘                      │
+└──────────────────────────┬──────────────────────────────────┘
                            │ JSON Webhook
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    PHASE 2: VALIDATION                       │
-│  ┌──────────┐    ┌──────────┐    ┌─────────────────────┐   │
-│  │  Receive │───▶│  dnsx    │───▶│ httpx + Tech Detect │   │
-│  │ Subdomains│   │ DNS Probe│    │                     │   │
-│  └──────────┘    └──────────┘    └─────────────────────┘   │
-│                                              │               │
-│                                              ▼               │
+│                    PHASE 2: VALIDATION                      │
+│  ┌──────────┐    ┌──────────┐    ┌─────────────────────┐    │
+│  │  Receive │───▶│  dnsx    │───▶│ httpx + Tech Detect│    │
+│  │ Subdomains│   │ DNS Probe│    │                     │    │
+│  └──────────┘    └──────────┘    └─────────────────────┘    │
+│                                              │              │
+│                                              ▼              │
 │                          ┌────────────────────────────┐     │
 │                          │ Merge Results + Write Files│     │
 │                          │  - phase2_data.json        │     │
@@ -73,33 +73,33 @@ Reconductor uses a multi-phase n8n workflow architecture to perform comprehensiv
                            │ Manual Trigger
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              PHASE 3: PARALLEL VULNERABILITY SCANNING        │
-│  ┌──────────┐    ┌──────────────────┐    ┌──────────────┐  │
-│  │ Webhook  │───▶│ Read Phase 2 Data│───▶│ IP-Centric   │  │
-│  │ Trigger  │    │                  │    │   Sharding   │  │
-│  └──────────┘    └──────────────────┘    └──────────────┘  │
-│                                                  │           │
-│                                                  ▼           │
+│              PHASE 3: PARALLEL VULNERABILITY SCANNING       │
+│  ┌──────────┐    ┌──────────────────┐    ┌──────────────┐   │
+│  │ Webhook  │───▶│ Read Phase 2 Data│───▶│ IP-Centric  │   │
+│  │ Trigger  │    │                  │    │   Sharding   │   │
+│  └──────────┘    └──────────────────┘    └──────────────┘   │
+│                                                  │          │
+│                                                  ▼          │
 │                          ┌───────────────────────────────┐  │
 │                          │ Execute Workflow (mode: each) │  │
 │                          │ waitForSubWorkflow: false     │  │
 │                          └───────────────────────────────┘  │
 │                          │                                  │
-│         ┌────────────────┼────────────────┬────────────┐   │
-│         ▼                ▼                ▼            ▼   │
-│   ┌─────────┐      ┌─────────┐      ┌─────────┐  ┌─────┐ │
-│   │Worker 1 │      │Worker 2 │ ...  │Worker 5 │  │ Wait│ │
-│   │ Nuclei  │      │ Nuclei  │      │ Nuclei  │  │ For │ │
-│   │  Scan   │      │  Scan   │      │  Scan   │  │ All │ │
-│   └────┬────┘      └────┬────┘      └────┬────┘  └──┬──┘ │
-│        │                │                 │           │    │
-│        ▼                ▼                 ▼           ▼    │
-│   ┌────────────────────────────────────────────────────┐  │
-│   │ Aggregate Results → Generate HTML Report          │  │
-│   │  - phase3_report.html                             │  │
-│   │  - phase3_data.json                               │  │
-│   │  - phase3_all_results.jsonl                       │  │
-│   └────────────────────────────────────────────────────┘  │
+│         ┌────────────────┼────────────────┬────────────┐    │
+│         ▼                ▼                ▼            ▼    │
+│   ┌─────────┐      ┌─────────┐      ┌─────────┐  ┌─────┐    │
+│   │Worker 1 │      │Worker 2 │ ...  │Worker 5 │  │ Wait│    │
+│   │ Nuclei  │      │ Nuclei  │      │ Nuclei  │  │ For │    │
+│   │  Scan   │      │  Scan   │      │  Scan   │  │ All │    │
+│   └────┬────┘      └────┬────┘      └────┬────┘  └──┬──┘    │
+│        │                │                 │           │     │
+│        ▼                ▼                 ▼           ▼     │
+│   ┌────────────────────────────────────────────────────┐    │
+│   │ Aggregate Results → Generate HTML Report           │    │
+│   │  - phase3_report.html                              │    │
+│   │  - phase3_data.json                                │    │
+│   │  - phase3_all_results.jsonl                        │    │
+│   └────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────┘
 ```
 

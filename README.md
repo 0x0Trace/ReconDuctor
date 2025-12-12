@@ -1,6 +1,16 @@
-# Reconductor
 
-**Automated reconnaissance pipeline powered by n8n workflows**
+
+=======================================================================
+||      ____                        ____             __              ||
+||     / __ \___  _________  ____  / __ \__  _______/ /_____  _____  ||
+||    / /_/ / _ \/ ___/ __ \/ __ \/ / / / / / / ___/ __/ __ \/ ___/  ||
+||   / _, _/  __/ /__/ /_/ / / / / /_/ / /_/ / /__/ /_/ /_/ / /      ||
+||  /_/ |_|\___/\___/\____/_/ /_/_____/\____/\___/\__/\____/_/       ||
+||                                                                   ||
+||            n8n Workflow Automation Pipeline Controller            ||
+||                    [v2.0 - Parallel Workers]                      ||
+=======================================================================
+
 
 Reconductor is a multi-phase reconnaissance automation system that orchestrates subdomain enumeration, live host validation, and vulnerability scanning using n8n workflows with parallel execution capabilities.
 
