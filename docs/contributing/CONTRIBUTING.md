@@ -29,12 +29,12 @@ Thank you for considering contributing to Reconductor! This guide will help you 
 ## Getting Started
 
 1. **Understand the Architecture**
-   - Read [WORKFLOWS.md](WORKFLOWS.md) for technical details
-   - Review [workflow_configuration_detailed.md](docs/workflow_configuration_detailed.md)
+   - Read [WORKFLOWS.md](../architecture/WORKFLOWS.md) for technical details
+   - Review [workflow_configuration_detailed.md](../architecture/workflow_configuration_detailed.md)
    - Understand the manager-worker model
 
 2. **Set Up Development Environment**
-   - Follow [INSTALLATION.md](INSTALLATION.md)
+   - Follow [INSTALLATION.md](../getting-started/INSTALLATION.md)
    - Import workflows into n8n
    - Test with a small domain
 

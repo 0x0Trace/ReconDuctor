@@ -567,7 +567,7 @@ crontab -e
 
 ## Troubleshooting Common Issues
 
-For detailed troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+For detailed troubleshooting, see [TROUBLESHOOTING.md](../guides/TROUBLESHOOTING.md).
 
 **Quick Fixes**:
 
@@ -589,9 +589,9 @@ wc -l /tmp/recon/example.com/phase3_all_results.jsonl
 
 ## Next Steps
 
-- **Configuration**: See [CONFIGURATION.md](CONFIGURATION.md) for customization options
-- **Architecture**: See [WORKFLOWS.md](WORKFLOWS.md) for workflow details
-- **Troubleshooting**: See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for issue resolution
+- **Configuration**: See [CONFIGURATION.md](../configuration/CONFIGURATION.md) for customization options
+- **Architecture**: See [WORKFLOWS.md](../architecture/WORKFLOWS.md) for workflow details
+- **Troubleshooting**: See [TROUBLESHOOTING.md](../guides/TROUBLESHOOTING.md) for issue resolution
 
 ---
 

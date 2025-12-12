@@ -498,7 +498,7 @@ grep -c '"severity"' /tmp/recon/{domain}/phase3_all_results.jsonl
 
 ## References
 
-- Original workflow configuration: [workflow_configuration.md](workflow_configuration.md)
+- Original workflow configuration: [workflow_configuration_detailed.md](workflow_configuration_detailed.md)
 - n8n Execute Workflow documentation: https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.executeworkflow/
 - Nuclei documentation: https://docs.projectdiscovery.io/tools/nuclei/overview
 

@@ -34,7 +34,7 @@ pip install requests
 chmod +x recon_orchestrator.py
 
 # Import n8n workflows
-# See INSTALLATION.md for detailed setup instructions
+# See docs/getting-started/INSTALLATION.md for detailed setup instructions
 ```
 
 ### Basic Usage
@@ -129,11 +129,13 @@ All results are stored in `/tmp/recon/{domain}/`:
 
 ## Documentation
 
-- [Installation Guide](INSTALLATION.md) - Complete setup instructions for all dependencies
-- [Configuration Guide](CONFIGURATION.md) - Customize paths and settings
-- [Workflow Documentation](WORKFLOWS.md) - Detailed n8n workflow architecture
-- [Usage Guide](USAGE.md) - Examples and common use cases
-- [Troubleshooting](TROUBLESHOOTING.md) - Common issues and solutions
+- [Installation Guide](docs/getting-started/INSTALLATION.md) - Complete setup instructions for all dependencies
+- [Usage Guide](docs/getting-started/USAGE.md) - Examples and common use cases
+- [Configuration Guide](docs/configuration/CONFIGURATION.md) - Customize paths and settings
+- [Workflow Architecture](docs/architecture/WORKFLOWS.md) - Detailed n8n workflow architecture
+- [Troubleshooting](docs/guides/TROUBLESHOOTING.md) - Common issues and solutions
+- [Contributing](docs/contributing/CONTRIBUTING.md) - How to contribute to the project
+- [Documentation Index](docs/INDEX.md) - Complete documentation navigation
 
 ---
 
@@ -192,7 +194,7 @@ curl -X POST http://localhost:5678/webhook/recon-phase3-parallel \
 - dnsx
 - nuclei
 
-See [INSTALLATION.md](INSTALLATION.md) for detailed installation instructions.
+See [INSTALLATION.md](docs/getting-started/INSTALLATION.md) for detailed installation instructions.
 
 ---
 
@@ -237,9 +239,9 @@ Contributions are welcome! Please ensure:
 
 For issues, questions, or contributions:
 
-1. Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues
-2. Review [WORKFLOWS.md](WORKFLOWS.md) for architecture details
-3. Consult the workflow configuration in `workflow_configuration.md`
+1. Check [TROUBLESHOOTING.md](docs/guides/TROUBLESHOOTING.md) for common issues
+2. Review [WORKFLOWS.md](docs/architecture/WORKFLOWS.md) for architecture details
+3. Consult the [detailed workflow configuration](docs/architecture/workflow_configuration_detailed.md)
 
 ---
 

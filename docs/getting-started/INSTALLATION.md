@@ -384,7 +384,7 @@ chmod +x quick-install.sh
 
 ## Path Configuration
 
-By default, Reconductor expects tools to be in your `$PATH`. If you installed tools in custom locations, see [CONFIGURATION.md](CONFIGURATION.md) for path customization.
+By default, Reconductor expects tools to be in your `$PATH`. If you installed tools in custom locations, see [CONFIGURATION.md](../configuration/CONFIGURATION.md) for path customization.
 
 ---
 
@@ -438,11 +438,11 @@ nuclei -update-templates
 
 After installation:
 
-1. Read [CONFIGURATION.md](CONFIGURATION.md) to customize paths and settings
-2. Review [WORKFLOWS.md](WORKFLOWS.md) to understand the architecture
+1. Read [CONFIGURATION.md](../configuration/CONFIGURATION.md) to customize paths and settings
+2. Review [WORKFLOWS.md](../architecture/WORKFLOWS.md) to understand the architecture
 3. Check [USAGE.md](USAGE.md) for usage examples
 4. Run your first scan with `./recon_orchestrator.py`
 
 ---
 
-**Need Help?** Check [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for common issues and solutions.
+**Need Help?** Check [TROUBLESHOOTING.md](../guides/TROUBLESHOOTING.md) for common issues and solutions.

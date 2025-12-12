@@ -540,9 +540,9 @@ After making changes:
 
 ## Need Help?
 
-- Configuration not working? See [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
-- Want to understand workflows? See [WORKFLOWS.md](WORKFLOWS.md)
-- Need usage examples? See [USAGE.md](USAGE.md)
+- Configuration not working? See [TROUBLESHOOTING.md](../guides/TROUBLESHOOTING.md)
+- Want to understand workflows? See [WORKFLOWS.md](../architecture/WORKFLOWS.md)
+- Need usage examples? See [USAGE.md](../getting-started/USAGE.md)
 
 ---
 
