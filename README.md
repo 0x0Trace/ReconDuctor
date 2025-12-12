@@ -1,5 +1,5 @@
 
-
+```
 =======================================================================
 ||      ____                        ____             __              ||
 ||     / __ \___  _________  ____  / __ \__  _______/ /_____  _____  ||
@@ -10,7 +10,7 @@
 ||            n8n Workflow Automation Pipeline Controller            ||
 ||                    [v2.0 - Parallel Workers]                      ||
 =======================================================================
-
+```
 
 Reconductor is a multi-phase reconnaissance automation system that orchestrates subdomain enumeration, live host validation, and vulnerability scanning using n8n workflows with parallel execution capabilities.
 
