@@ -1,0 +1,477 @@
+{
+  "name": "Recon Automation - Phase 1: Subdomain Enumeration",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recon-phase1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f6284795-c3a3-4dbe-a318-f86420fe90a8",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        -864,
+        32
+      ],
+      "webhookId": "recon-start",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Reconnaissance workflow started\",\n  \"target\": \"{{ $json.body.domain }}\",\n  \"timestamp\": \"{{ $now.toISO() }}\"\n}",
+        "options": {}
+      },
+      "id": "00042ec4-f679-4c8b-ad7c-da56013ffea5",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -624,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "domain-field",
+              "name": "domain",
+              "value": "={{ $json.body.domain || 'example.com' }}",
+              "type": "string"
+            },
+            {
+              "id": "timestamp-field",
+              "name": "scan_timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5e9dde90-cb04-4e37-8335-ede4b77cb055",
+      "name": "Extract Domain",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -384,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the text output from the Execute Command node\nconst output = $input.item.json.stdout || '';\nconst stderr = $input.item.json.stderr || '';\nconst domain = $input.item.json.command?.match(/-d\\s+([^\\s]+)/)?.[1] || 'unknown';\n\n// Check for errors\nif (stderr && stderr.toLowerCase().includes('error')) {\n  return [{ json: { subdomain: '', source: 'subfinder', error: stderr.trim(), domain: domain } }];\n}\n\n// Split by new line to get individual subdomains\nconst lines = output.split('\\n').filter(line => {\n  const trimmed = line.trim();\n  // Skip empty lines and error messages\n  return trimmed && !trimmed.startsWith('ERROR') && !trimmed.includes('/');\n});\n\n// If no results\nif (lines.length === 0) {\n  return [{ json: { subdomain: '', source: 'subfinder', error: 'No subdomains found', domain: domain } }];\n}\n\n// Create the JSON objects - extract domain from first subdomain\nconst extractedDomain = lines[0]?.trim().split('.').slice(-2).join('.') || domain;\nconst subdomains = lines.map(line => ({\n  json: {\n    subdomain: line.trim().toLowerCase(),\n    source: 'subfinder',\n    domain: extractedDomain\n  }\n}));\n\nreturn subdomains;"
+      },
+      "id": "80a1aa59-7907-43a2-a510-1bb48a5e2029",
+      "name": "Parse Subfinder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        -80
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "75705e8a-bf58-41f2-b20e-6b93a61fcb27",
+      "name": "Merge Sources",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        576,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all items from the Merge node\n// (It doesn't matter if it's 2 inputs or 4, this array holds everything)\nconst items = $input.all();\nconst uniqueSubdomains = new Map();\nconst toolErrors = [];\n\n// Robustly find the domain from the first available item that has it\nlet domain = 'unknown';\nconst validDomainItem = items.find(i => i.json.domain && i.json.domain !== 'unknown');\nif (validDomainItem) {\n    domain = validDomainItem.json.domain;\n}\n\nitems.forEach(item => {\n  // 1. Determine Source\n  // We rely strictly on the 'source' field set by previous nodes (e.g. 'subfinder', 'katana')\n  // This makes the code independent of the Merge Node order.\n  let source = item.json.source || 'unknown_source';\n\n  // 2. Handle Errors (if any tool passed an error object)\n  if (item.json.error) {\n     toolErrors.push({ source: source, error: item.json.error });\n     return; // Skip processing this item\n  }\n\n  // 3. Handle Subdomain Logic\n  const rawSub = item.json.subdomain;\n\n  // Ensure it's a valid string\n  if (rawSub && typeof rawSub === 'string') {\n     const cleanSub = rawSub.trim().toLowerCase();\n     \n     // Filter out junk (empty strings, or lines that don't look like domains)\n     if (cleanSub.includes('.')) {\n         if (!uniqueSubdomains.has(cleanSub)) {\n             // New entry\n             uniqueSubdomains.set(cleanSub, { subdomain: cleanSub, sources: [source] });\n         } else {\n             // Existing entry: Add the new source to the list if not present\n             const entry = uniqueSubdomains.get(cleanSub);\n             if (!entry.sources.includes(source)) {\n                 entry.sources.push(source);\n             }\n         }\n     }\n  }\n});\n\n// Convert Map to Arrays for Output\nconst results = Array.from(uniqueSubdomains.values());\nconst subdomainList = results.map(r => r.subdomain);\n\nconsole.log(`Phase 1 Complete: ${subdomainList.length} unique subdomains found for ${domain}`);\n\nreturn {\n  json: {\n    domain: domain,\n    subdomains: subdomainList,      // The simple list for Phase 2\n    subdomainDetails: results,      // The detailed breakdown (who found what)\n    totalCount: subdomainList.length,\n    toolErrors: toolErrors,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "26497a69-1ce3-4d59-b85b-150100741689",
+      "name": "Deduplicate Subdomains",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        64
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "eb29dcdc-407e-4ec2-948e-25cf1ef3f750",
+      "name": "Phase 1 Complete",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Phase 1: Subdomain Enumeration\n\n**Tools:**\n- Subfinder (passive DNS)\n- Shodan SSL (SSL certificates)\n\n**Process:**\n1. Extract domain from webhook\n2. Run parallel enumeration tools\n3. Merge all results\n4. Deduplicate across sources\n5. Pass JSON to Phase 2 (no file I/O)\n\n**JSON Output to Phase 2:**\n```json\n{\n  \"domain\": \"example.com\",\n  \"subdomains\": [\"sub1.example.com\", ...],\n  \"subdomainDetails\": [...],\n  \"totalCount\": 42,\n  \"toolErrors\": [...],\n  \"timestamp\": \"...\"\n}\n```\n\n**Sources tracked:**\n- subfinder\n- shodan\n\n**Error Handling:**\nTool errors are tracked in `toolErrors`\narray and passed to Phase 2.\n\n**Note:** Shodan requires API key:\n```\nshodan init <API_KEY>\n```\n\n**Data Flow:**\nPhase 1 → JSON webhook → Phase 2\n(No intermediate files)",
+        "height": 580,
+        "width": 420
+      },
+      "id": "bf2632cb-6f04-430c-9e3c-3299f6bf5316",
+      "name": "Note - Phase 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        592,
+        -592
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/recon-phase2",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \n  domain: $json.domain, \n  subdomains: $json.new_subdomains, \n  totalCount: $json.new_count, \n  timestamp: $json.timestamp \n}) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "trigger-phase2",
+      "name": "Trigger Phase 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1968,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=shodan search \"ssl:{{ $('Extract Domain').item.json.domain }}\" --fields hostnames --no-color 2>/dev/null | tr ';' '\\n' | grep -v \"^$\" | sort -u"
+      },
+      "id": "shodan-ssl-enum",
+      "name": "Shodan SSL Enumeration",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        224
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Shodan SSL enumeration output\nconst output = $input.item.json.stdout || '';\nconst stderr = $input.item.json.stderr || '';\n\n// Try to extract domain from command\nconst commandMatch = $input.item.json.command?.match(/DOMAIN=\"([^\"]+)\"/);\nconst domain = commandMatch ? commandMatch[1] : 'unknown';\n\n// Check for error conditions\nif (output.includes('ERROR:SHODAN_NOT_INSTALLED')) {\n  return [{ json: { subdomain: '', source: 'shodan', error: 'Shodan CLI not installed', domain: domain } }];\n}\nif (output.includes('ERROR:SHODAN_NO_API_KEY')) {\n  return [{ json: { subdomain: '', source: 'shodan', error: 'Shodan API key not configured', domain: domain } }];\n}\nif (output.includes('ERROR:SHODAN_NO_RESULTS')) {\n  return [{ json: { subdomain: '', source: 'shodan', error: 'No results found', domain: domain } }];\n}\n\n// Split by newlines and filter valid subdomains\nconst lines = output.split('\\n').filter(line => {\n  const trimmed = line.trim();\n  // Skip empty lines, error messages, comments, and file paths\n  if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('ERROR:')) {\n    return false;\n  }\n  // Skip file paths (contain /)\n  if (trimmed.includes('/')) {\n    return false;\n  }\n  // Must contain a dot and be a valid hostname format\n  return trimmed.includes('.') && /^[a-z0-9][a-z0-9.-]+[a-z0-9]$/i.test(trimmed);\n});\n\n// Create subdomain objects\nconst subdomains = lines.map(line => ({\n  json: {\n    subdomain: line.trim().toLowerCase(),\n    source: 'shodan',\n    domain: domain\n  }\n}));\n\nconsole.log(`Shodan SSL enumeration found ${subdomains.length} subdomains`);\n\n// Return results or empty placeholder with error\nif (subdomains.length > 0) {\n  return subdomains;\n} else {\n  return [{ json: { subdomain: '', source: 'shodan', error: 'No valid subdomains parsed', domain: domain } }];\n}"
+      },
+      "id": "parse-shodan-results",
+      "name": "Parse Shodan Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=/home/kali/go/bin/subfinder -d {{ $json.domain }} -all -recursive -t 50  -timeout 20"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        -80
+      ],
+      "id": "eeb27159-ec85-4bb7-9093-fb1e97256e28",
+      "name": "Subfinder",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Get Domain from the \"Source of Truth\" (The very first node)\n// This guarantees we get the target domain, no matter what happens in between.\nlet domain = 'unknown';\ntry {\n    domain = $('Extract Domain').first().json.domain;\n} catch(e) {\n    // Fallback: Try to read from current input if Extract Domain fails\n    domain = $input.item.json.domain || 'unknown';\n}\n\n// 2. Get the subdomains list from the previous node (Deduplicate Subdomains)\nconst subdomains = $input.item.json.subdomains || [];\n\n// 3. Create the list content\nconst listContent = subdomains.join('\\n');\n\nreturn {\n  json: {\n    domain: domain,\n    tempPath: `/tmp/incoming_${domain}.txt`,\n    masterPath: `/tmp/recon/${domain}/master_subdomains.txt`\n  },\n  // Create binary directly (No \"Convert to File\" node needed)\n  binary: {\n    data: {\n      data: Buffer.from(listContent).toString('base64'),\n      mimeType: 'text/plain',\n      fileName: 'subdomains.txt'\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        64
+      ],
+      "id": "ceaa18cd-f829-41d9-9a90-185dec50caf6",
+      "name": "Prepare Data"
+    },
+    {
+      "parameters": {
+        "command": "=# 1. Ensure master directory exists\nmkdir -p /tmp/recon/{{ $json.domain }}\n\n# 2. Run anew using the file on disk\n# We simply cat the temp file we just wrote into anew\ncat {{ $json.tempPath }} | /home/kali/go/bin/anew {{ $json.masterPath }}\n\n# 3. Cleanup\nrm {{ $json.tempPath }}"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        64
+      ],
+      "id": "7bf19f50-fa4a-4a39-a952-fbc46a692d0e",
+      "name": "Run anew"
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $input.item.json.stdout || '';\nconst newSubdomains = output.split('\\n').filter(line => line.trim() !== '');\n\nreturn {\n  json: {\n    domain: $('Prepare Data').item.json.domain,\n    new_subdomains: newSubdomains,\n    new_count: newSubdomains.length,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        64
+      ],
+      "id": "8614c889-ac96-45d2-b234-26909fb2bfac",
+      "name": "Parse anew output"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "687d34cd-1134-487b-8538-b23e94a5faff",
+              "leftValue": "={{ $json.new_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1744,
+        64
+      ],
+      "id": "9dc93a06-4995-41dc-8af0-03245592903d",
+      "name": "Any new targets?"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $json.tempPath }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1184,
+        64
+      ],
+      "id": "0e295a76-2e51-49b2-93ae-340590c445eb",
+      "name": "Read/Write Files from Disk"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Response": {
+      "main": [
+        [
+          {
+            "node": "Extract Domain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Domain": {
+      "main": [
+        [
+          {
+            "node": "Shodan SSL Enumeration",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Subfinder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Phase 2": {
+      "main": [
+        [
+          {
+            "node": "Phase 1 Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shodan SSL Enumeration": {
+      "main": [
+        [
+          {
+            "node": "Parse Shodan Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Subfinder": {
+      "main": [
+        [
+          {
+            "node": "Merge Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Sources": {
+      "main": [
+        [
+          {
+            "node": "Deduplicate Subdomains",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Shodan Results": {
+      "main": [
+        [
+          {
+            "node": "Merge Sources",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Deduplicate Subdomains": {
+      "main": [
+        [
+          {
+            "node": "Prepare Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Subfinder": {
+      "main": [
+        [
+          {
+            "node": "Parse Subfinder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phase 1 Complete": {
+      "main": [
+        []
+      ]
+    },
+    "Prepare Data": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run anew": {
+      "main": [
+        [
+          {
+            "node": "Parse anew output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse anew output": {
+      "main": [
+        [
+          {
+            "node": "Any new targets?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any new targets?": {
+      "main": [
+        [
+          {
+            "node": "Trigger Phase 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        [
+          {
+            "node": "Run anew",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "9f2acd7a-f4b7-4fc6-816c-5b3846ab87cf",
+  "meta": {
+    "instanceId": "3d65e600a9aeb19d6f05ce03e45f574014956a91db8dd7174a8b9335554e5aa3"
+  },
+  "id": "p7dqxf5jY9Pb4vNH",
+  "tags": []
+}

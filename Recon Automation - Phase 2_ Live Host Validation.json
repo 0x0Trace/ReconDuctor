@@ -1,0 +1,449 @@
+{
+  "name": "Recon Automation - Phase 2: Live Host Validation",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Phase 2: Live Host Validation (OPTIMIZED)\n\n**Tools:**\n- httpx (HTTP/HTTPS probing)\n- dnsx (DNS validation)\n\n**Input:** JSON from Phase 1 webhook\n```json\n{\n  \"domain\": \"example.com\",\n  \"subdomains\": [\"sub1.example.com\", ...],\n  \"totalCount\": 42\n}\n```\n\n**BUFFER FIX (Large Datasets):**\n1. Execute Command writes to temp file\n2. Returns only `FILE:path` via stdout\n3. Read File node reads file natively\n4. Code node parses binary → text\n5. No maxBuffer limits! ✓\n\n**Flow:**\n```\nRun tool → Read File → Parse Results\n```\n\n**Output Files:**\n- `/tmp/recon/{domain}/phase2_report.html`\n- `/tmp/recon/{domain}/phase2_data.json`\n- `/tmp/recon/{domain}/phase2_summary.txt`",
+        "height": 704,
+        "width": 640,
+        "color": 3
+      },
+      "id": "1b1fa312-5fee-4fce-ade6-d0ab0a85e4be",
+      "name": "Note - Phase 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -416,
+        -1248
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "2a54ca7c-eab0-40f9-a13d-50ca3bf22fda",
+      "name": "Phase 2 Complete",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        288,
+        -464
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recon-phase2",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e0e4fe08-cdfa-481d-b73d-d1eda35f8bed",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        -2448,
+        -448
+      ],
+      "webhookId": "recon-phase2",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Phase 2: Live host validation started\",\n  \"timestamp\": \"{{ $now.toISO() }}\"\n}",
+        "options": {}
+      },
+      "id": "4f23639b-ecfe-48cf-a26f-178441094b21",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -2208,
+        -448
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract subdomains from Phase 1 JSON and prepare single file\nconst body = $input.item.json.body || $input.item.json;\n\nconst subdomains = body.subdomains || [];\nconst domain = body.domain || 'unknown';\nconst totalCount = body.totalCount || subdomains.length;\n\nconsole.log(`Phase 2 received ${totalCount} subdomains for domain: ${domain}`);\n\nif (subdomains.length === 0) {\n  console.log('WARNING: No subdomains received from Phase 1');\n  throw new Error('No subdomains to process');\n}\n\n// Build the hosts list as a single string\nconst hostList = subdomains.map(s => s.trim()).join('\\n');\nconst timestamp = Date.now();\nconst hostsFile = `/tmp/recon_hosts_${timestamp}.txt`;\n\nreturn [{\n  json: {\n    domain: domain,\n    hostsFile: hostsFile,\n    hostList: hostList,\n    totalCount: subdomains.length\n  }\n}];"
+      },
+      "id": "4ff2441f-fc38-4749-ac5f-def5789851df",
+      "name": "Extract & Write All Hosts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1968,
+        -448
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=# Create output directory for later use\nmkdir -p /tmp/recon/{{ $json.domain }}\n\n# Write hosts file\ncat > {{ $json.hostsFile }} << 'HOSTLIST_EOF'\n{{ $json.hostList }}\nHOSTLIST_EOF\n\necho \"Written {{ $json.totalCount }} hosts to {{ $json.hostsFile }}\""
+      },
+      "id": "a11da01d-f818-48b5-a258-b18ac0e25bcd",
+      "name": "Write Hosts File",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -1728,
+        -448
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=HOSTS_FILE=\"{{ $('Extract & Write All Hosts').item.json.hostsFile }}\"\nDOMAIN=\"{{ $('Extract & Write All Hosts').item.json.domain }}\"\nOUTPUT_FILE=\"/tmp/httpx_${DOMAIN}_results.json\"\n\n# BALANCED CONFIGURATION:\n# - threads 40: Much faster (was 5)\n# - timeout 5: Fails fast on dead hosts (was 15)\n# - retries 1: Don't waste time retrying if blocked (was 3)\n# - headers: Kept to maintain browser legitimacy\n# OUTPUT: Write to file, return filepath only (avoids maxBuffer issue)\n\ncat \"$HOSTS_FILE\" | /home/kali/go/bin/httpx -silent -json \\\n  -threads 40 \\\n  -rate-limit 100 \\\n  -timeout 5 \\\n  -retries 1 \\\n  -method GET \\\n  -follow-redirects \\\n  -header 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' \\\n  -header 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8' \\\n  -header 'Accept-Language: en-US,en;q=0.9' \\\n  -nc \\\n  -tech-detect \\\n  -status-code \\\n  -title \\\n  -web-server \\\n  -cdn \\\n  -ip \\\n  > \"$OUTPUT_FILE\" 2>/dev/null\n\n# Return filepath and line count only (not full content - prevents maxBuffer exceeded)\nLINE_COUNT=$(wc -l < \"$OUTPUT_FILE\" 2>/dev/null || echo 0)\necho \"FILE:$OUTPUT_FILE\"\necho \"LINES:$LINE_COUNT\""
+      },
+      "id": "eb9b6988-9776-4924-b27a-ba87a75b6cde",
+      "name": "Run httpx (All Hosts)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -1408,
+        -656
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=HOSTS_FILE=\"{{ $('Extract & Write All Hosts').item.json.hostsFile }}\"\nDOMAIN=\"{{ $('Extract & Write All Hosts').item.json.domain }}\"\nOUTPUT_FILE=\"/tmp/dnsx_${DOMAIN}_results.json\"\n\n# Debug: Check hosts file exists\necho \"DEBUG: Hosts file: $HOSTS_FILE\"\necho \"DEBUG: Host count: $(wc -l < \"$HOSTS_FILE\")\"\n\n# Run dnsx with high concurrency on ALL hosts at once\ncat \"$HOSTS_FILE\" | dnsx -silent -json -a \\\n  -threads 100 \\\n  -retry 1 \\\n  > \"$OUTPUT_FILE\" 2>/dev/null\n\n# Debug: Check output\necho \"DEBUG: Output file: $OUTPUT_FILE\"\necho \"DEBUG: Output size: $(stat -c%s \"$OUTPUT_FILE\" 2>/dev/null || echo 0) bytes\"\necho \"DEBUG: Output lines: $(wc -l < \"$OUTPUT_FILE\" 2>/dev/null || echo 0)\"\necho \"DEBUG: First line: $(head -1 \"$OUTPUT_FILE\" 2>/dev/null || echo 'empty')\"\n\n# Return filepath\necho \"FILE:$OUTPUT_FILE\""
+      },
+      "id": "2e148dba-0786-43a0-82ff-f535bbf4375a",
+      "name": "Run dnsx (All Hosts)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -1408,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse httpx results from file content (n8n native file reading)\nconst results = [];\n\n// Debug: Log the structure we're receiving\nconst binaryData = $input.item.binary;\nconsole.log('Binary keys:', binaryData ? Object.keys(binaryData) : 'none');\n\nlet fileContent = '';\n\ntry {\n  if (binaryData) {\n    // n8n Read File node stores binary under 'data' key by default\n    const binaryKey = Object.keys(binaryData)[0]; // Get first binary key\n    console.log('Using binary key:', binaryKey);\n    \n    if (binaryKey && binaryData[binaryKey]) {\n      const binaryObj = binaryData[binaryKey];\n      console.log('Binary object keys:', Object.keys(binaryObj));\n      \n      // The base64 data is in .data property\n      if (binaryObj.data) {\n        // Use Buffer to decode base64 (atob not available in n8n)\n        fileContent = Buffer.from(binaryObj.data, 'base64').toString('utf8');\n        console.log('Decoded content length:', fileContent.length);\n      }\n    }\n  }\n} catch (e) {\n  console.log('Error reading binary data:', e.message);\n}\n\nif (!fileContent || !fileContent.trim()) {\n  console.log('No file content found from Read httpx File node');\n  return [{ json: { host: 'HTTPX_NO_RESULTS', alive: false, method: 'httpx' } }];\n}\n\nconst lines = fileContent.split('\\n').filter(line => line.trim());\nconsole.log(`Processing ${lines.length} httpx result lines`);\n\nlines.forEach(line => {\n  try {\n    const data = JSON.parse(line);\n    if (data.url) {\n      let domain = data.input || '';\n      if (!domain && data.url) {\n        try {\n          const urlObj = new URL(data.url);\n          domain = urlObj.hostname;\n        } catch (e) {\n          domain = data.url.replace(/^https?:\\/\\//, '').split('/')[0].split(':')[0];\n        }\n      }\n      \n      results.push({\n        json: {\n          host: domain,\n          url: data.url,\n          status_code: data['status_code'] || data.status_code,\n          title: data.title || '',\n          tech: data.tech || [],\n          webserver: data.webserver || '',\n          content_length: data['content_length'] || 0,\n          content_type: data['content_type'] || '',\n          method: 'httpx',\n          scheme: data.scheme || 'http',\n          port: data.port || (data.scheme === 'https' ? 443 : 80),\n          cdn: data.cdn || false,\n          cdn_name: data.cdn_name || '',\n          ip_addresses: data.host || data.a || '',\n          alive: true\n        }\n      });\n    }\n  } catch (e) {\n    // Skip malformed lines\n  }\n});\n\nconsole.log(`httpx found ${results.length} live web services`);\n\nif (results.length === 0) {\n  return [{ json: { host: 'HTTPX_NO_RESULTS', alive: false, method: 'httpx' } }];\n}\n\nreturn results;"
+      },
+      "id": "5ea7ba9c-5d65-4c5d-a54c-72133596c1fb",
+      "name": "Parse httpx Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1088,
+        -656
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse dnsx results from file content (n8n native file reading)\nconst results = [];\n\n// Debug: Log the structure we're receiving\nconst binaryData = $input.item.binary;\nconsole.log('Binary keys:', binaryData ? Object.keys(binaryData) : 'none');\n\nlet fileContent = '';\n\ntry {\n  if (binaryData) {\n    // n8n Read File node stores binary under 'data' key by default\n    // The actual base64 content is in the 'data' property of that object\n    const binaryKey = Object.keys(binaryData)[0]; // Get first binary key\n    console.log('Using binary key:', binaryKey);\n    \n    if (binaryKey && binaryData[binaryKey]) {\n      const binaryObj = binaryData[binaryKey];\n      console.log('Binary object keys:', Object.keys(binaryObj));\n      \n      // The base64 data is in .data property\n      if (binaryObj.data) {\n        // Use Buffer to decode base64 (atob not available in n8n)\n        fileContent = Buffer.from(binaryObj.data, 'base64').toString('utf8');\n        console.log('Decoded content length:', fileContent.length);\n      }\n    }\n  }\n} catch (e) {\n  console.log('Error reading binary data:', e.message);\n}\n\nif (!fileContent || !fileContent.trim()) {\n  console.log('No file content found from Read dnsx File node');\n  return [{ json: { host: 'DNSX_NO_RESULTS', alive: false, method: 'dnsx' } }];\n}\n\nconst lines = fileContent.split('\\n').filter(line => line.trim());\nconsole.log(`Processing ${lines.length} dnsx result lines`);\n\nlines.forEach(line => {\n  try {\n    const data = JSON.parse(line);\n    if (data.host && data.a && data.a.length > 0) {\n      results.push({\n        json: {\n          host: data.host,\n          ip_addresses: data.a || [],\n          method: 'dnsx',\n          alive: true\n        }\n      });\n    }\n  } catch (e) {\n    // Skip malformed lines\n  }\n});\n\nconsole.log(`dnsx resolved ${results.length} hosts`);\n\nif (results.length === 0) {\n  return [{ json: { host: 'DNSX_NO_RESULTS', alive: false, method: 'dnsx' } }];\n}\n\nreturn results;"
+      },
+      "id": "769a5c1a-b948-4120-a6c6-470cb43c7c55",
+      "name": "Parse dnsx Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1088,
+        -320
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "0277b461-b648-420f-ba2a-14112f1f7a3e",
+      "name": "Merge httpx + dnsx",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        -912,
+        -480
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Deduplicate and merge data from httpx and dnsx\nconst items = $input.all();\nconst hostMap = new Map();\n\nitems.forEach(item => {\n  const data = item.json;\n  const host = data.host;\n  \n  // Filter out placeholder items\n  if (!host || host === 'HTTPX_NO_RESULTS' || host === 'DNSX_NO_RESULTS') return;\n  \n  if (!hostMap.has(host)) {\n    hostMap.set(host, {\n      host: host,\n      alive: true,\n      methods: [],\n      url: null,\n      status_code: null,\n      title: null,\n      tech: [],\n      webserver: null,\n      content_type: null,\n      scheme: null,\n      port: null,\n      cdn: false,\n      cdn_name: null,\n      ip_addresses: []\n    });\n  }\n  \n  const existing = hostMap.get(host);\n  \n  if (data.method && !existing.methods.includes(data.method)) {\n    existing.methods.push(data.method);\n  }\n  \n  if (data.url) existing.url = data.url;\n  if (data.status_code) existing.status_code = data.status_code;\n  if (data.title) existing.title = data.title;\n  if (data.webserver) existing.webserver = data.webserver;\n  if (data.content_type) existing.content_type = data.content_type;\n  if (data.scheme) existing.scheme = data.scheme;\n  if (data.port) existing.port = data.port;\n  if (data.cdn) existing.cdn = data.cdn;\n  if (data.cdn_name) existing.cdn_name = data.cdn_name;\n  \n  if (data.tech && Array.isArray(data.tech) && data.tech.length > 0) {\n    existing.tech = [...new Set([...existing.tech, ...data.tech])];\n  }\n  if (data.ip_addresses) {\n    const ips = Array.isArray(data.ip_addresses) ? data.ip_addresses : [data.ip_addresses];\n    existing.ip_addresses = [...new Set([...existing.ip_addresses, ...ips])];\n  }\n});\n\nconst results = Array.from(hostMap.values()).map(item => {\n  return {\n    json: {\n      ...item,\n      methods: item.methods.join(', '),\n      tech: item.tech.join(', '),\n      ip_addresses: item.ip_addresses.join(', '),\n      verification_count: item.methods.length\n    }\n  };\n});\n\n// Get domain from the input data\nlet domain = 'unknown';\ntry {\n  const firstItem = $('Extract & Write All Hosts').first();\n  domain = firstItem.json.domain || 'unknown';\n} catch(e) {}\n\nconsole.log(`Phase 2 Complete: ${results.length} unique live hosts verified for ${domain}`);\n\n// Pass domain along for report generation\nreturn results.map(r => ({ json: { ...r.json, rootDomain: domain } }));"
+      },
+      "id": "41d2b77f-d317-4af1-9c3d-273ea60fcbd2",
+      "name": "Deduplicate Hosts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        -464
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate comprehensive HTML report for Phase 2 results\n// Output 3 items for HTML, JSON, and TXT files\nconst items = $input.all();\nconst timestamp = new Date().toISOString();\nconst dateFormatted = new Date().toLocaleString();\n\n// Extract root domain\nlet rootDomain = 'unknown';\nif (items.length > 0 && items[0].json.rootDomain) {\n  rootDomain = items[0].json.rootDomain;\n} else if (items.length > 0 && items[0].json.host) {\n  const hostParts = items[0].json.host.split('.');\n  if (hostParts.length >= 2) {\n    rootDomain = hostParts.slice(-2).join('.');\n  } else {\n    rootDomain = items[0].json.host;\n  }\n}\n\nconst outputDir = `/tmp/recon/${rootDomain}`;\n\n// Sort by verification_count (highest first), then by status code, then alphabetically\nitems.sort((a, b) => {\n  if (b.json.verification_count !== a.json.verification_count) {\n    return b.json.verification_count - a.json.verification_count;\n  }\n  if ((b.json.status_code || 0) !== (a.json.status_code || 0)) {\n    return (a.json.status_code || 999) - (b.json.status_code || 999);\n  }\n  return a.json.host.localeCompare(b.json.host);\n});\n\n// Calculate statistics\nconst stats = {\n  total: items.length,\n  httpOnly: items.filter(i => i.json.methods === 'httpx').length,\n  dnsOnly: items.filter(i => i.json.methods === 'dnsx').length,\n  both: items.filter(i => i.json.methods.includes('httpx') && i.json.methods.includes('dnsx')).length,\n  withTech: items.filter(i => i.json.tech && i.json.tech.trim()).length,\n  status200: items.filter(i => i.json.status_code === 200).length,\n  status301_302: items.filter(i => i.json.status_code === 301 || i.json.status_code === 302).length,\n  status403: items.filter(i => i.json.status_code === 403).length,\n  status404: items.filter(i => i.json.status_code === 404).length,\n  status5xx: items.filter(i => i.json.status_code >= 500).length,\n  withCDN: items.filter(i => i.json.cdn).length\n};\n\n// Collect all unique technologies\nconst allTech = new Set();\nitems.forEach(i => {\n  if (i.json.tech) {\n    i.json.tech.split(', ').forEach(t => { if (t.trim()) allTech.add(t.trim()); });\n  }\n});\n\n// Collect all unique web servers\nconst allServers = new Set();\nitems.forEach(i => {\n  if (i.json.webserver) allServers.add(i.json.webserver);\n});\n\n// Build table rows\nconst tableRows = items.map(item => {\n  const d = item.json;\n  let statusClass = 'status-dns';\n  let statusText = 'DNS';\n  \n  if (d.status_code) {\n    statusText = d.status_code;\n    \n    // --- CUSTOM WAF DETECTION LOGIC ---\n    // If we get a 502/403 AND it detects Cloudflare/CDN, label it as WAF (Success)\n    const isWaf = (d.status_code === 502 || d.status_code === 403) && \n                  (d.cdn || (d.webserver && d.webserver.toLowerCase().includes('cloudflare')));\n\n    if (isWaf) {\n        statusText = `WAF (${d.status_code})`;\n        statusClass = 'status-403'; // Use the orange \"Forbidden\" color for visibility\n    }\n    // --- END CUSTOM LOGIC ---\n    else if (d.status_code === 200) statusClass = 'status-200';\n    else if (d.status_code === 301 || d.status_code === 302) statusClass = 'status-301';\n    else if (d.status_code === 403) statusClass = 'status-403';\n    else if (d.status_code === 404) statusClass = 'status-404';\n    else if (d.status_code >= 500) statusClass = 'status-5xx';\n    else statusClass = 'status-301';\n  }\n   \n  const methods = d.methods.split(', ').map(m => \n    '<span class=\"method-badge method-' + m + '\">' + m + '</span>'\n  ).join('');\n   \n  const tech = d.tech ? d.tech.split(', ').filter(t => t.trim()).map(t => \n    '<span class=\"tech-tag\">' + t + '</span>'\n  ).join('') : '-';\n   \n  const cdnBadge = d.cdn ? '<span class=\"cdn-tag\">CDN' + (d.cdn_name ? ': ' + d.cdn_name : '') + '</span>' : '';\n  const titleEscaped = (d.title || '').replace(/\"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n   \n  return '<tr>' +\n    '<td class=\"host-cell\">' + (d.url ? '<a href=\"' + d.url + '\" target=\"_blank\">' + d.host + '</a>' : d.host) + cdnBadge + '</td>' +\n    '<td><span class=\"status ' + statusClass + '\">' + statusText + '</span></td>' +\n    '<td>' + methods + '</td>' +\n    '<td class=\"title-cell\" title=\"' + titleEscaped + '\">' + (d.title || '-') + '</td>' +\n    '<td>' + (d.webserver ? '<span class=\"server-tag\">' + d.webserver + '</span>' : '-') + '</td>' +\n    '<td>' + tech + '</td>' +\n    '<td class=\"ip-cell\">' + (d.ip_addresses || '-') + '</td>' +\n  '</tr>';\n}).join('\\n');\n\n// Generate HTML Report\nconst html = `<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>Recon Report - Phase 2: Live Host Validation - ${rootDomain}</title>\n  <style>\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.6; padding: 20px; }\n    .container { max-width: 1600px; margin: 0 auto; }\n    h1 { color: #58a6ff; border-bottom: 2px solid #30363d; padding-bottom: 15px; margin-bottom: 25px; }\n    h2 { color: #8b949e; margin: 25px 0 15px; font-size: 1.2em; }\n    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }\n    .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; text-align: center; }\n    .stat-card .number { font-size: 2.5em; font-weight: bold; color: #58a6ff; }\n    .stat-card .label { color: #8b949e; font-size: 0.9em; margin-top: 5px; }\n    .stat-card.success .number { color: #3fb950; }\n    .stat-card.warning .number { color: #d29922; }\n    .stat-card.danger .number { color: #f85149; }\n    .stat-card.info .number { color: #a371f7; }\n    table { width: 100%; border-collapse: collapse; background: #161b22; border-radius: 8px; overflow: hidden; margin-bottom: 30px; }\n    th { background: #21262d; color: #58a6ff; padding: 12px 15px; text-align: left; font-weight: 600; position: sticky; top: 0; }\n    td { padding: 10px 15px; border-bottom: 1px solid #30363d; vertical-align: top; }\n    tr:hover { background: #1c2128; }\n    .status { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.85em; font-weight: 600; }\n    .status-200 { background: #238636; color: #fff; }\n    .status-301 { background: #1f6feb; color: #fff; }\n    .status-403 { background: #d29922; color: #000; }\n    .status-404 { background: #6e7681; color: #fff; }\n    .status-5xx { background: #f85149; color: #fff; }\n    .status-dns { background: #a371f7; color: #fff; }\n    .tech-tag { display: inline-block; background: #30363d; color: #79c0ff; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; margin: 2px; }\n    .server-tag { display: inline-block; background: #1f3d2e; color: #3fb950; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; }\n    .cdn-tag { display: inline-block; background: #3d1f1f; color: #f85149; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; margin-left: 5px; }\n    .method-badge { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 0.75em; margin-right: 3px; }\n    .method-httpx { background: #238636; color: #fff; }\n    .method-dnsx { background: #a371f7; color: #fff; }\n    .host-cell { white-space: nowrap; min-width: 250px; max-width: 400px; overflow: hidden; text-overflow: ellipsis; }\n    .host-cell a { color: #58a6ff; text-decoration: none; }\n    .ip-cell { font-family: 'Consolas', monospace; font-size: 0.9em; color: #8b949e; }\n    .title-cell { max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n    .tech-summary { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin-bottom: 30px; }\n    .timestamp { color: #6e7681; font-size: 0.9em; margin-bottom: 20px; }\n    .legend { display: flex; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; padding: 15px; background: #161b22; border-radius: 8px; }\n    .legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.85em; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <h1>Recon Report - Phase 2: Live Host Validation</h1>\n    <p class=\"timestamp\">Target: ${rootDomain} | Generated: ${dateFormatted}</p>\n    <h2>Summary Statistics</h2>\n    <div class=\"stats-grid\">\n      <div class=\"stat-card\"><div class=\"number\">${stats.total}</div><div class=\"label\">Total Live Hosts</div></div>\n      <div class=\"stat-card success\"><div class=\"number\">${stats.both}</div><div class=\"label\">HTTP + DNS Verified</div></div>\n      <div class=\"stat-card info\"><div class=\"number\">${stats.httpOnly}</div><div class=\"label\">HTTP Only</div></div>\n      <div class=\"stat-card\"><div class=\"number\">${stats.dnsOnly}</div><div class=\"label\">DNS Only</div></div>\n      <div class=\"stat-card success\"><div class=\"number\">${stats.status200}</div><div class=\"label\">Status 200 OK</div></div>\n      <div class=\"stat-card warning\"><div class=\"number\">${stats.status301_302}</div><div class=\"label\">Redirects</div></div>\n      <div class=\"stat-card danger\"><div class=\"number\">${stats.status403}</div><div class=\"label\">Forbidden (403)</div></div>\n      <div class=\"stat-card info\"><div class=\"number\">${stats.withTech}</div><div class=\"label\">Tech Fingerprinted</div></div>\n    </div>\n    ${allTech.size > 0 ? '<h2>Detected Technologies</h2><div class=\"tech-summary\">' + Array.from(allTech).sort().map(t => '<span class=\"tech-tag\">' + t + '</span>').join('') + '</div>' : ''}\n    ${allServers.size > 0 ? '<h2>Web Servers</h2><div class=\"tech-summary\">' + Array.from(allServers).sort().map(s => '<span class=\"server-tag\">' + s + '</span>').join('') + '</div>' : ''}\n    <h2>Live Hosts Detail</h2>\n    <div class=\"legend\">\n      <div class=\"legend-item\"><span class=\"status status-200\">200</span> OK</div>\n      <div class=\"legend-item\"><span class=\"status status-301\">3xx</span> Redirect</div>\n      <div class=\"legend-item\"><span class=\"status status-403\">403</span> Forbidden</div>\n      <div class=\"legend-item\"><span class=\"status status-404\">404</span> Not Found</div>\n      <div class=\"legend-item\"><span class=\"status status-5xx\">5xx</span> Server Error</div>\n      <div class=\"legend-item\"><span class=\"status status-dns\">DNS</span> DNS Only</div>\n      <div class=\"legend-item\"><span class=\"status status-403\">WAF</span> WAF/Cloudflare</div>\n    </div>\n    <table>\n      <thead><tr><th>Host</th><th>Status</th><th>Verification</th><th>Title</th><th>Web Server</th><th>Technologies</th><th>IP Addresses</th></tr></thead>\n      <tbody>${tableRows}</tbody>\n    </table>\n    <p class=\"timestamp\">Report generated by n8n Recon Automation Pipeline</p>\n  </div>\n</body>\n</html>`;\n\n// Generate JSON export\nconst jsonExport = JSON.stringify({\n  meta: { report_type: 'phase2_live_host_validation', target_domain: rootDomain, timestamp: timestamp, total_hosts: stats.total },\n  statistics: stats,\n  technologies: Array.from(allTech).sort(),\n  webservers: Array.from(allServers).sort(),\n  hosts: items.map(i => i.json)\n}, null, 2);\n\n// Generate plain text summary\nlet textOutput = 'PHASE 2: LIVE HOST VALIDATION - SUMMARY\\n';\ntextOutput += '='.repeat(50) + '\\n';\ntextOutput += 'Target: ' + rootDomain + '\\n';\ntextOutput += 'Timestamp: ' + dateFormatted + '\\n';\ntextOutput += 'Total Live Hosts: ' + stats.total + '\\n';\ntextOutput += 'HTTP+DNS Verified: ' + stats.both + ' | HTTP Only: ' + stats.httpOnly + ' | DNS Only: ' + stats.dnsOnly + '\\n';\ntextOutput += 'Tech Fingerprinted: ' + stats.withTech + '\\n';\ntextOutput += '='.repeat(50) + '\\n\\n';\ntextOutput += 'Output Directory: ' + outputDir + '/\\n';\ntextOutput += 'HTML Report: phase2_report.html\\n';\ntextOutput += 'JSON Export: phase2_data.json\\n';\n\n// Return 3 items - one for each file\nreturn [\n  { json: { content: html, filePath: `${outputDir}/phase2_report.html`, rootDomain: rootDomain } },\n  { json: { content: jsonExport, filePath: `${outputDir}/phase2_data.json`, rootDomain: rootDomain } },\n  { json: { content: textOutput, filePath: `${outputDir}/phase2_summary.txt`, rootDomain: rootDomain } }\n];"
+      },
+      "id": "961f4597-1ef4-4a86-82a3-1433947fbebb",
+      "name": "Format Phase 2 Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -496,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=# Cleanup temp hosts file\nrm -f /tmp/recon_hosts_*.txt 2>/dev/null || true\n\necho \"Phase 2 files written:\"\nls -la /tmp/recon/{{ $('Format Phase 2 Output').first().json.rootDomain }}/ 2>/dev/null || echo \"No files found\""
+      },
+      "id": "7f1db0a8-4df5-4cbd-a556-fca4340b1b18",
+      "name": "Cleanup & Complete",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        96,
+        -480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "content",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        -304,
+        -480
+      ],
+      "id": "454e52e8-129f-46df-80c2-6e8ff70cc7fd",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Format Phase 2 Output').item.json.filePath }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -112,
+        -480
+      ],
+      "id": "61f16eaa-6555-41c9-b7c4-e9a8e989a429",
+      "name": "Read/Write Files from Disk"
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.stdout.match(/FILE:(.+)/)[1].trim() }}",
+        "options": {}
+      },
+      "id": "f181e22c-e62e-4123-8e23-a2b3c044f390",
+      "name": "Read dnsx File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -1280,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.stdout.match(/FILE:(.+)/)[1].trim() }}",
+        "options": {}
+      },
+      "id": "18b3d984-86a7-417e-a93b-dd54b67b07ed",
+      "name": "Read httpx File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        -1280,
+        -656
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Response": {
+      "main": [
+        [
+          {
+            "node": "Extract & Write All Hosts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract & Write All Hosts": {
+      "main": [
+        [
+          {
+            "node": "Write Hosts File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Hosts File": {
+      "main": [
+        [
+          {
+            "node": "Run httpx (All Hosts)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Run dnsx (All Hosts)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse httpx Results": {
+      "main": [
+        [
+          {
+            "node": "Merge httpx + dnsx",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse dnsx Results": {
+      "main": [
+        [
+          {
+            "node": "Merge httpx + dnsx",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge httpx + dnsx": {
+      "main": [
+        [
+          {
+            "node": "Deduplicate Hosts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduplicate Hosts": {
+      "main": [
+        [
+          {
+            "node": "Format Phase 2 Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cleanup & Complete": {
+      "main": [
+        [
+          {
+            "node": "Phase 2 Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Phase 2 Output": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Read/Write Files from Disk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read/Write Files from Disk": {
+      "main": [
+        [
+          {
+            "node": "Cleanup & Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run dnsx (All Hosts)": {
+      "main": [
+        [
+          {
+            "node": "Read dnsx File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read dnsx File": {
+      "main": [
+        [
+          {
+            "node": "Parse dnsx Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run httpx (All Hosts)": {
+      "main": [
+        [
+          {
+            "node": "Read httpx File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read httpx File": {
+      "main": [
+        [
+          {
+            "node": "Parse httpx Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "ab97ba91-3da0-444d-8cde-2f0cf484a273",
+  "meta": {
+    "instanceId": "3d65e600a9aeb19d6f05ce03e45f574014956a91db8dd7174a8b9335554e5aa3"
+  },
+  "id": "buLRNQbEx1NYjsua",
+  "tags": []
+}

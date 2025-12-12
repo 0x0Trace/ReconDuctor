@@ -1,0 +1,558 @@
+{
+  "name": "Recon - Phase 3 Main Manager",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "recon-phase3-parallel",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        208,
+        400
+      ],
+      "webhookId": "recon-phase3-parallel",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"started\",\n  \"message\": \"Phase 3 Parallel Manager initiated\",\n  \"domain\": \"{{ $json.body.domain }}\",\n  \"timestamp\": \"{{ $now.toISO() }}\",\n  \"mode\": \"parallel-worker\"\n}",
+        "options": {}
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        400,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "domain",
+              "name": "domain",
+              "type": "string",
+              "value": "={{ $json.body.domain || 'unknown' }}"
+            },
+            {
+              "id": "phase2-path",
+              "name": "phase2JsonPath",
+              "type": "string",
+              "value": "={{ '/tmp/recon/' + ($json.body.domain || 'unknown') + '/phase2_data.json' }}"
+            },
+            {
+              "id": "output-dir",
+              "name": "outputDir",
+              "type": "string",
+              "value": "={{ '/tmp/recon/' + ($json.body.domain || 'unknown') }}"
+            },
+            {
+              "id": "timestamp",
+              "name": "timestamp",
+              "type": "string",
+              "value": "={{ Date.now() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "extract-domain",
+      "name": "Extract Domain",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        608,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.phase2JsonPath }}",
+        "options": {}
+      },
+      "id": "read-phase2",
+      "name": "Read Phase 2 Data",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        800,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// IP-CENTRIC SHARDING - FIXED 5 WORKER POOL\n// ============================================================================\n// Strategy: Group hosts by IP to prevent WAF triggers from parallel hits\n// Never split hosts sharing the same IP across different workers\n// ============================================================================\n\nconst phase2Binary = $input.item.binary.data;\nconst jsonString = Buffer.from(phase2Binary.data, 'base64').toString('utf-8');\nlet phase2Data = {};\ntry { \n  phase2Data = JSON.parse(jsonString); \n} catch (e) { \n  phase2Data = { hosts: [] }; \n}\n\nconst domain = $('Extract Domain').item.json.domain;\nconst outputDir = $('Extract Domain').item.json.outputDir;\nconst timestamp = $('Extract Domain').item.json.timestamp;\nconst hosts = phase2Data.hosts || [];\n\n// Fixed worker pool size - CRITICAL for WAF evasion\nconst MAX_WORKERS = 5;\n\n// ============================================================================\n// STEP 1: Group hosts by IP address\n// ============================================================================\nconst ipClusters = {};\nlet totalProcessed = 0;\nlet hostsWithIP = 0;\n\nfor (const host of hosts) {\n  const url = host.url || '';\n  if (!url) continue;\n  \n  totalProcessed++;\n  \n  // Get IP - CHECK ALL POSSIBLE FIELD NAMES from Phase 2 output\n  // Phase 2 uses 'ip_addresses' field from httpx/dnsx output\n  let ip = host.ip_addresses || host.ip || host.resolved_ip || host.a || 'unknown';\n  \n  // Handle array of IPs (take first)\n  if (Array.isArray(ip)) {\n    ip = ip[0] || 'unknown';\n  }\n  \n  // Normalize - handle comma-separated IPs too\n  ip = String(ip).trim();\n  if (ip.includes(',')) {\n    ip = ip.split(',')[0].trim();\n  }\n  \n  if (ip && ip !== 'unknown' && ip !== 'null' && ip !== '') {\n    hostsWithIP++;\n  } else {\n    ip = 'unknown';\n  }\n  \n  // Create cluster for this IP\n  if (!ipClusters[ip]) {\n    ipClusters[ip] = {\n      ip: ip,\n      hosts: [],\n      techs: new Set()\n    };\n  }\n  \n  ipClusters[ip].hosts.push(url);\n  \n  // Track tech for logging (optional)\n  if (host.tech) {\n    const techList = Array.isArray(host.tech) ? host.tech : [host.tech];\n    techList.forEach(t => ipClusters[ip].techs.add(String(t).toLowerCase()));\n  }\n}\n\n// ============================================================================\n// STEP 2: Sort IP clusters by size (largest first for better distribution)\n// ============================================================================\nconst sortedClusters = Object.values(ipClusters).sort((a, b) => b.hosts.length - a.hosts.length);\n\nconsole.log(`[IP-Shard] Total hosts: ${totalProcessed}`);\nconsole.log(`[IP-Shard] Unique IPs: ${sortedClusters.length}`);\nconsole.log(`[IP-Shard] Hosts with IP: ${hostsWithIP}`);\n\n// ============================================================================\n// STEP 3: Distribute IP clusters into 5 balanced batches\n// Using greedy load-balancing: assign each cluster to the lightest worker\n// ============================================================================\nconst workers = [];\nfor (let i = 0; i < MAX_WORKERS; i++) {\n  workers.push({\n    workerIndex: i + 1,\n    hosts: [],\n    ipCount: 0,\n    ips: []\n  });\n}\n\n// Greedy assignment: always assign to the worker with fewest hosts\nfor (const cluster of sortedClusters) {\n  // Find worker with minimum load\n  let minWorker = workers[0];\n  for (const w of workers) {\n    if (w.hosts.length < minWorker.hosts.length) {\n      minWorker = w;\n    }\n  }\n  \n  // Assign entire IP cluster to this worker (never split!)\n  minWorker.hosts.push(...cluster.hosts);\n  minWorker.ipCount++;\n  minWorker.ips.push(cluster.ip);\n}\n\n// ============================================================================\n// STEP 4: Generate output items for each worker (only non-empty)\n// ============================================================================\nconst results = [];\n\nfor (const worker of workers) {\n  if (worker.hosts.length === 0) continue; // Skip empty workers\n  \n  results.push({\n    json: {\n      workerIndex: worker.workerIndex,\n      target_list: worker.hosts.join('\\n'),\n      count: worker.hosts.length,\n      ipCount: worker.ipCount,\n      domain: domain,\n      outputDir: outputDir,\n      timestamp: timestamp,\n      totalWorkers: MAX_WORKERS,\n      totalHosts: totalProcessed,\n      totalUniqueIPs: sortedClusters.length,\n      // For debugging\n      ipSample: worker.ips.slice(0, 3).join(', ')\n    }\n  });\n}\n\n// Log distribution stats\nconsole.log('[IP-Shard] Worker distribution:');\nfor (const worker of workers) {\n  if (worker.hosts.length > 0) {\n    console.log(`  Worker ${worker.workerIndex}: ${worker.hosts.length} hosts across ${worker.ipCount} IPs`);\n  }\n}\n\n// Handle edge case: no hosts\nif (results.length === 0) {\n  return [{ \n    json: { \n      workerIndex: 0, \n      target_list: '', \n      count: 0, \n      domain, \n      outputDir, \n      timestamp, \n      totalWorkers: 0,\n      isEmpty: true \n    } \n  }];\n}\n\nreturn results;"
+      },
+      "id": "group-by-tech",
+      "name": "IP-Centric Sharding (5 Workers)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "check-has-workers",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "check-empty",
+      "name": "Check If Empty",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "msg",
+              "name": "message",
+              "type": "string",
+              "value": "No hosts with tech fingerprints found in Phase 2 data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "no-targets-msg",
+      "name": "No Targets Found",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1408,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=TIMESTAMP=\"{{ $('Extract Domain').item.json.timestamp }}\"\n# Count actual workers spawned (items from sharding that passed the If check)\nACTUAL_WORKERS=\"{{ $('IP-Centric Sharding (5 Workers)').all().filter(item => item.json.count > 0).length }}\"\nMAX_WAIT=7200\nCHECK_INTERVAL=10\nELAPSED=0\n\necho \"[IP-Centric] Waiting for $ACTUAL_WORKERS workers to complete...\"\necho \"Timestamp: $TIMESTAMP\"\necho \"Strategy: Fixed 5-worker pool with IP clustering\"\n\nwhile [ $ELAPSED -lt $MAX_WAIT ]; do\n  DONE_COUNT=$(ls -1 /tmp/phase3_done_${TIMESTAMP}_worker_*.marker 2>/dev/null | wc -l | tr -d ' ')\n  \n  if [ \"$DONE_COUNT\" -ge \"$ACTUAL_WORKERS\" ]; then\n    echo \"SUCCESS:ALL_COMPLETE\"\n    echo \"COMPLETED:$DONE_COUNT\"\n    echo \"EXPECTED:$ACTUAL_WORKERS\"\n    echo \"ELAPSED:${ELAPSED}s\"\n    exit 0\n  fi\n  \n  echo \"Progress: $DONE_COUNT/$ACTUAL_WORKERS workers done (${ELAPSED}s elapsed)\"\n  sleep $CHECK_INTERVAL\n  ELAPSED=$((ELAPSED + CHECK_INTERVAL))\ndone\n\necho \"WARNING:TIMEOUT\"\nexit 1"
+      },
+      "id": "wait-for-workers",
+      "name": "Wait For All Workers",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=OUTPUT_DIR=\"{{ $('Extract Domain').item.json.outputDir }}\"\nTIMESTAMP=\"{{ $('Extract Domain').item.json.timestamp }}\"\n\nmkdir -p \"$OUTPUT_DIR\"\nAGGREGATED_FILE=\"${OUTPUT_DIR}/phase3_all_results.jsonl\"\n\n# Aggregate from worker files (new naming convention)\ncat /tmp/phase3_results_${TIMESTAMP}_worker_*.jsonl > \"$AGGREGATED_FILE\" 2>/dev/null || touch \"$AGGREGATED_FILE\"\n\nTOTAL=$(wc -l < \"$AGGREGATED_FILE\" 2>/dev/null | tr -d ' ' || echo \"0\")\nCRITICAL=$(grep -c '\"critical\"' \"$AGGREGATED_FILE\" 2>/dev/null || echo \"0\")\nHIGH=$(grep -c '\"high\"' \"$AGGREGATED_FILE\" 2>/dev/null || echo \"0\")\nMEDIUM=$(grep -c '\"medium\"' \"$AGGREGATED_FILE\" 2>/dev/null || echo \"0\")\n\n# Cleanup worker temp files\nrm -f /tmp/phase3_targets_${TIMESTAMP}_worker_*.txt 2>/dev/null\nrm -f /tmp/phase3_results_${TIMESTAMP}_worker_*.jsonl 2>/dev/null\nrm -f /tmp/phase3_done_${TIMESTAMP}_worker_*.marker 2>/dev/null\n\necho \"FILE:$AGGREGATED_FILE\"\necho \"TOTAL:$TOTAL\"\necho \"CRITICAL:$CRITICAL\"\necho \"HIGH:$HIGH\"\necho \"MEDIUM:$MEDIUM\""
+      },
+      "id": "aggregate-results",
+      "name": "Aggregate All Results",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1808,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $('Extract Domain').item.json.outputDir }}/phase3_all_results.jsonl",
+        "options": {}
+      },
+      "id": "read-aggregated",
+      "name": "Read Aggregated Results",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// GENERATE FINAL REPORT - IP-CENTRIC VERSION\n// ============================================================================\n\nconst domain = $('Extract Domain').item.json.domain;\nconst outputDir = $('Extract Domain').item.json.outputDir;\nconst shardData = $('IP-Centric Sharding (5 Workers)').first().json;\nconst totalWorkers = shardData.totalWorkers || 5;\nconst totalHosts = shardData.totalHosts || 0;\nconst totalUniqueIPs = shardData.totalUniqueIPs || 0;\nconst timestamp = new Date().toISOString();\nconst dateFormatted = new Date().toLocaleString();\n\nlet findings = [];\ntry {\n  const fileData = $input.item.binary;\n  if (fileData && fileData.data) {\n    const jsonlContent = Buffer.from(fileData.data.data, 'base64').toString('utf-8');\n    if (jsonlContent.trim()) {\n      const lines = jsonlContent.split('\\n').filter(line => line.trim());\n      for (const line of lines) {\n        try {\n          const f = JSON.parse(line);\n          if (f.info && f.host) {\n            findings.push({\n              template_id: f['template-id'] || 'unknown',\n              name: f.info.name || 'Unknown',\n              severity: f.info.severity || 'unknown',\n              host: f.host || '',\n              matched_at: f['matched-at'] || f.host,\n              type: f.type || 'http',\n              description: f.info.description || '',\n              tags: f.info.tags || [],\n              reference: f.info.reference || [],\n              cve_id: (f.info.classification && f.info.classification['cve-id']) ? f.info.classification['cve-id'] : null,\n              cvss: (f.info.classification && f.info.classification['cvss-score']) ? f.info.classification['cvss-score'] : null,\n              extracted: f['extracted-results'] || [],\n              matcher: f['matcher-name'] || '',\n              curl: f['curl-command'] || ''\n            });\n          }\n        } catch (e) {}\n      }\n    }\n  }\n} catch (e) { console.log('Error:', e.message); }\n\nconst severityOrder = { critical: 0, high: 1, medium: 2, low: 3, info: 4, unknown: 5 };\nfindings.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);\n\nconst fStats = {\n  total: findings.length,\n  critical: findings.filter(f => f.severity === 'critical').length,\n  high: findings.filter(f => f.severity === 'high').length,\n  medium: findings.filter(f => f.severity === 'medium').length,\n  low: findings.filter(f => f.severity === 'low').length,\n  info: findings.filter(f => f.severity === 'info').length,\n  unique_hosts: new Set(findings.map(f => f.host)).size,\n  with_cve: findings.filter(f => f.cve_id).length\n};\n\nlet tableRows = '';\nfor (const f of findings) {\n  let sc = 'severity-info';\n  if (f.severity === 'critical') sc = 'severity-critical';\n  else if (f.severity === 'high') sc = 'severity-high';\n  else if (f.severity === 'medium') sc = 'severity-medium';\n  else if (f.severity === 'low') sc = 'severity-low';\n  \n  const cveBadge = f.cve_id ? '<span class=\"cve\">' + f.cve_id + '</span>' : '';\n  let tags = '';\n  (f.tags || []).slice(0, 4).forEach(t => tags += '<span class=\"tag\">' + t + '</span>');\n  let refs = '';\n  (f.reference || []).slice(0, 2).forEach(r => refs += '<a href=\"' + r + '\" target=\"_blank\">ref</a> ');\n  const ext = (f.extracted && f.extracted.length) ? '<div class=\"extracted\">' + f.extracted.slice(0,2).join(', ') + '</div>' : '';\n  \n  tableRows += '<tr><td><span class=\"severity ' + sc + '\">' + f.severity.toUpperCase() + '</span></td><td class=\"host-cell\"><a href=\"' + f.matched_at + '\" target=\"_blank\">' + f.host + '</a></td><td><strong>' + f.name + '</strong>' + cveBadge + '<br><small>' + f.template_id + '</small>' + ext + '</td><td>' + tags + '</td><td>' + (refs || '-') + '</td></tr>';\n}\n\nconst html = `<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <title>Phase 3: IP-Centric Nuclei Scanner - ${domain}</title>\n  <style>\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body { font-family: \"Segoe UI\", system-ui, sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; line-height: 1.5; }\n    .container { max-width: 1400px; margin: 0 auto; }\n    h1 { color: #58a6ff; border-bottom: 2px solid #238636; padding-bottom: 15px; margin-bottom: 10px; }\n    h2 { color: #8b949e; margin: 30px 0 15px; font-size: 1.2em; }\n    .subtitle { color: #8b949e; margin-bottom: 25px; }\n    .ip-badge { display: inline-block; background: #1f6feb; color: #fff; padding: 4px 12px; border-radius: 12px; font-size: 0.8em; margin-left: 10px; }\n    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 30px; }\n    .stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px; text-align: center; }\n    .stat .num { font-size: 2em; font-weight: bold; color: #58a6ff; }\n    .stat .lbl { color: #8b949e; font-size: 0.8em; margin-top: 5px; }\n    .stat.critical .num { color: #f85149; }\n    .stat.high .num { color: #da3633; }\n    .stat.medium .num { color: #d29922; }\n    .stat.green .num { color: #238636; }\n    .stat.blue .num { color: #1f6feb; }\n    table { width: 100%; border-collapse: collapse; background: #161b22; border-radius: 8px; overflow: hidden; margin-bottom: 25px; }\n    th { background: #21262d; color: #58a6ff; padding: 12px; text-align: left; font-weight: 600; }\n    td { padding: 10px 12px; border-bottom: 1px solid #30363d; vertical-align: top; }\n    tr:hover { background: #1c2128; }\n    a { color: #58a6ff; text-decoration: none; }\n    a:hover { text-decoration: underline; }\n    .severity { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.75em; font-weight: 600; }\n    .severity-critical { background: #d73a49; color: #fff; }\n    .severity-high { background: #f85149; color: #fff; }\n    .severity-medium { background: #d29922; color: #000; }\n    .severity-low { background: #1f6feb; color: #fff; }\n    .severity-info { background: #6e7681; color: #fff; }\n    .cve { display: inline-block; background: #3d1f1f; color: #f85149; padding: 2px 6px; border-radius: 4px; font-size: 0.7em; margin-left: 8px; }\n    .tag { display: inline-block; background: #30363d; color: #79c0ff; padding: 2px 6px; border-radius: 3px; font-size: 0.7em; margin: 1px 2px; }\n    small { color: #6e7681; }\n    .host-cell { max-width: 300px; word-break: break-all; }\n    .extracted { font-size: 0.8em; color: #f0883e; margin-top: 4px; background: #2d1f0d; padding: 3px 6px; border-radius: 3px; }\n    .no-findings { text-align: center; padding: 60px 20px; background: #161b22; border-radius: 12px; border: 2px dashed #238636; }\n    .no-findings .icon { font-size: 4em; margin-bottom: 15px; }\n    .no-findings h3 { color: #238636; font-size: 1.5em; margin-bottom: 10px; }\n    .section-info { background: #161b22; border-left: 3px solid #1f6feb; padding: 12px 15px; margin-bottom: 20px; border-radius: 0 8px 8px 0; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <h1>Phase 3: Nuclei Vulnerability Scanner <span class=\"ip-badge\">IP-CENTRIC</span></h1>\n    <p class=\"subtitle\">Target: <strong>${domain}</strong> | Generated: ${dateFormatted}</p>\n    <div class=\"section-info\">\n      <strong>IP-Centric Parallel Scanning:</strong> Scanned ${totalHosts} hosts across ${totalUniqueIPs} unique IPs using ${totalWorkers} parallel workers.<br>\n      <small>Strategy: Hosts sharing the same IP are kept together to prevent WAF triggers.</small>\n    </div>\n    <h2>Summary</h2>\n    <div class=\"stats-grid\">\n      <div class=\"stat green\"><div class=\"num\">${totalHosts}</div><div class=\"lbl\">Hosts Scanned</div></div>\n      <div class=\"stat blue\"><div class=\"num\">${totalUniqueIPs}</div><div class=\"lbl\">Unique IPs</div></div>\n      <div class=\"stat\"><div class=\"num\">${totalWorkers}</div><div class=\"lbl\">Workers</div></div>\n      <div class=\"stat\"><div class=\"num\">${fStats.total}</div><div class=\"lbl\">Findings</div></div>\n      <div class=\"stat critical\"><div class=\"num\">${fStats.critical}</div><div class=\"lbl\">Critical</div></div>\n      <div class=\"stat high\"><div class=\"num\">${fStats.high}</div><div class=\"lbl\">High</div></div>\n      <div class=\"stat medium\"><div class=\"num\">${fStats.medium}</div><div class=\"lbl\">Medium</div></div>\n    </div>\n    <h2>Vulnerability Findings</h2>\n    ${findings.length === 0 ?\n      '<div class=\"no-findings\"><div class=\"icon\">✓</div><h3>No Vulnerabilities Found</h3><p>Scanned ' + totalHosts + ' hosts across ' + totalUniqueIPs + ' IPs. No issues detected.</p></div>' :\n      '<table><tr><th style=\"width:90px\">Severity</th><th style=\"width:250px\">Host</th><th>Finding</th><th>Tags</th><th>Refs</th></tr>' + tableRows + '</table>'\n    }\n    <p style=\"margin-top:30px;color:#6e7681;font-size:0.85em;text-align:center\">Generated by Phase 3 IP-Centric Parallel Nuclei Scanner</p>\n  </div>\n</body>\n</html>`;\n\nconst jsonExport = JSON.stringify({\n  meta: {\n    domain,\n    timestamp,\n    scanner: 'phase3-ip-centric-nuclei',\n    mode: 'ip-centric-parallel',\n    version: '6.0'\n  },\n  stats: {\n    totalHosts,\n    totalUniqueIPs,\n    totalWorkers,\n    findings: fStats\n  },\n  findings\n}, null, 2);\n\nlet summary = `PHASE 3: IP-CENTRIC PARALLEL NUCLEI SCANNER\n${'='.repeat(50)}\nTarget: ${domain}\nGenerated: ${dateFormatted}\nMode: IP-CENTRIC PARALLEL (WAF-SAFE)\n\nSCAN STATS:\n  Hosts scanned: ${totalHosts}\n  Unique IPs: ${totalUniqueIPs}\n  Parallel workers: ${totalWorkers}\n\nFINDINGS:\n  Total: ${fStats.total}\n  Critical: ${fStats.critical}\n  High: ${fStats.high}\n  Medium: ${fStats.medium}\n  Low: ${fStats.low}\n  Info: ${fStats.info}\n`;\n\nreturn [\n  { json: { content: html, filePath: outputDir + '/phase3_report.html', type: 'html' } },\n  { json: { content: jsonExport, filePath: outputDir + '/phase3_data.json', type: 'json' } },\n  { json: { content: summary, filePath: outputDir + '/phase3_summary.txt', type: 'txt' } }\n];"
+      },
+      "id": "generate-report",
+      "name": "Generate Final Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2208,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "content",
+        "options": {}
+      },
+      "id": "convert-file",
+      "name": "Convert to File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        2400,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ $('Generate Final Report').item.json.filePath }}",
+        "options": {}
+      },
+      "id": "write-files",
+      "name": "Write Output Files",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2608,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=DOMAIN=\"{{ $('Extract Domain').item.json.domain }}\"\nOUTPUT_DIR=\"{{ $('Extract Domain').item.json.outputDir }}\"\n\necho \"========================================\"\necho \"  PHASE 3: PARALLEL SCANNER COMPLETE\"\necho \"========================================\"\necho \"Domain: $DOMAIN\"\necho \"Mode: PARALLEL WORKERS\"\necho \"Output: $OUTPUT_DIR/\"\nls -lah \"$OUTPUT_DIR/\" 2>/dev/null | grep phase3 || echo \"Files written\"\necho \"View report: firefox $OUTPUT_DIR/phase3_report.html\""
+      },
+      "id": "cleanup",
+      "name": "Cleanup & Complete",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2800,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sCC4a3A0w8hYYqL9"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "workerIndex": "={{ $json.workerIndex }}",
+            "target_list": "={{ $json.target_list }}",
+            "count": "={{ $json.count }}",
+            "ipCount": "={{ $json.ipCount }}",
+            "domain": "={{ $json.domain }}",
+            "outputDir": "={{ $json.outputDir }}",
+            "timestamp": "={{ $json.timestamp }}",
+            "totalWorkers": "={{ $json.totalWorkers }}",
+            "totalHosts": "={{ $json.totalHosts }}",
+            "totalUniqueIPs": "={{ $json.totalUniqueIPs }}"
+          },
+          "schema": [
+            {
+              "id": "workerIndex",
+              "type": "number",
+              "displayName": "workerIndex",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true
+            },
+            {
+              "id": "target_list",
+              "type": "string",
+              "displayName": "target_list",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true
+            },
+            {
+              "id": "count",
+              "type": "number",
+              "displayName": "count",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true
+            },
+            {
+              "id": "ipCount",
+              "type": "number",
+              "displayName": "ipCount",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true
+            },
+            {
+              "id": "domain",
+              "type": "string",
+              "displayName": "domain",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true
+            },
+            {
+              "id": "outputDir",
+              "type": "string",
+              "displayName": "outputDir",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true
+            },
+            {
+              "id": "timestamp",
+              "type": "string",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true
+            },
+            {
+              "id": "totalWorkers",
+              "type": "number",
+              "displayName": "totalWorkers",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true
+            },
+            {
+              "id": "totalHosts",
+              "type": "number",
+              "displayName": "totalHosts",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true
+            },
+            {
+              "id": "totalUniqueIPs",
+              "type": "number",
+              "displayName": "totalUniqueIPs",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true
+            }
+          ],
+          "matchingColumns": [],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "mode": "each",
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "execute-workers",
+      "name": "Execute Workers (Parallel)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1408,
+        400
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Response": {
+      "main": [
+        [
+          {
+            "node": "Extract Domain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Domain": {
+      "main": [
+        [
+          {
+            "node": "Read Phase 2 Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Phase 2 Data": {
+      "main": [
+        [
+          {
+            "node": "IP-Centric Sharding (5 Workers)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IP-Centric Sharding (5 Workers)": {
+      "main": [
+        [
+          {
+            "node": "Check If Empty",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait For All Workers": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate All Results": {
+      "main": [
+        [
+          {
+            "node": "Read Aggregated Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Aggregated Results": {
+      "main": [
+        [
+          {
+            "node": "Generate Final Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Final Report": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Write Output Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Output Files": {
+      "main": [
+        [
+          {
+            "node": "Cleanup & Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workers (Parallel)": {
+      "main": [
+        [
+          {
+            "node": "Wait For All Workers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Empty": {
+      "main": [
+        [
+          {
+            "node": "Execute Workers (Parallel)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Targets Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "c38c6bbb-1267-4fa8-ba8a-385df3d1f96c",
+  "meta": {
+    "instanceId": "3d65e600a9aeb19d6f05ce03e45f574014956a91db8dd7174a8b9335554e5aa3"
+  },
+  "id": "YiTd4X1k1CF4rNLo",
+  "tags": []
+}

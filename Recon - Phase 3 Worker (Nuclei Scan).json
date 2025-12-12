@@ -1,0 +1,161 @@
+{
+  "name": "Recon - Phase 3 Worker (Nuclei Scan)",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "worker-trigger",
+      "name": "Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        208,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=WORKER_IDX=\"{{ $json.workerIndex }}\"\nTIMESTAMP=\"{{ $json.timestamp }}\"\n\n# Write targets to temp file (worker-based naming)\nTARGETS_FILE=\"/tmp/phase3_targets_${TIMESTAMP}_worker_${WORKER_IDX}.txt\"\n\ncat > \"$TARGETS_FILE\" << 'TARGETEOF'\n{{ $json.target_list }}\nTARGETEOF\n\n# Output file path for next node\necho \"FILE:$TARGETS_FILE\"\necho \"COUNT:$(wc -l < \"$TARGETS_FILE\" | tr -d ' ')\"\necho \"WORKER:$WORKER_IDX\""
+      },
+      "id": "write-targets",
+      "name": "Write Target File",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        432,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "command": "=WORKER_IDX=\"{{ $('Workflow Trigger').item.json.workerIndex }}\"\nTIMESTAMP=\"{{ $('Workflow Trigger').item.json.timestamp }}\"\nIP_COUNT=\"{{ $('Workflow Trigger').item.json.ipCount }}\"\n\nTARGETS_FILE=\"/tmp/phase3_targets_${TIMESTAMP}_worker_${WORKER_IDX}.txt\"\nRESULTS_FILE=\"/tmp/phase3_results_${TIMESTAMP}_worker_${WORKER_IDX}.jsonl\"\nDONE_FILE=\"/tmp/phase3_done_${TIMESTAMP}_worker_${WORKER_IDX}.marker\"\n\necho \"[*] Worker $WORKER_IDX starting (IP-Centric Mode)\"\necho \"[*] Targets: $(wc -l < $TARGETS_FILE) hosts across $IP_COUNT IPs\"\necho \"[*] Strategy: Nuclei Automatic Scan (-as) with WAF-safe rate limits\"\n\n# ============================================================================\n# WAF-SAFE NUCLEI CONFIGURATION\n# ============================================================================\n# -as         = Automatic scan (smart template selection based on detected tech)\n# -rl 15      = Max 15 requests/second (CRITICAL for WAF evasion)\n# -bs 2       = Bulk size of 2 hosts at a time\n# -c 10       = 10 concurrent templates per host  \n# -timeout 8  = 8 second timeout per request\n# -retries 1  = Single retry on failure\n# -H          = Spoof User-Agent to look like real browser\n# -ni         = Disable interactsh (no OOB callbacks)\n# -nc         = No color (cleaner logs)\n# -etags      = Exclude aggressive/intrusive tags\n# ============================================================================\n\nnuclei \\\n  -l \"$TARGETS_FILE\" \\\n  -as \\\n  -rl 15 \\\n  -bs 2 \\\n  -c 10 \\\n  -timeout 8 \\\n  -retries 1 \\\n  -H \"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\" \\\n  -etags fuzz,dos,fuzzing,intrusive,sqli,xss,rce,bruteforce \\\n  -s critical,high,medium \\\n  -silent \\\n  -jsonl \\\n  -o \"$RESULTS_FILE\" \\\n  -ni \\\n  -nc \\\n  2>/dev/null\n\n# Ensure file exists even if no findings\ntouch \"$RESULTS_FILE\"\n\n# Deduplicate results\nif [ -s \"$RESULTS_FILE\" ]; then\n  sort -u \"$RESULTS_FILE\" > \"${RESULTS_FILE}.tmp\" && mv \"${RESULTS_FILE}.tmp\" \"$RESULTS_FILE\"\nfi\n\n# Write completion marker\necho \"COMPLETED:$(date +%s)\" > \"$DONE_FILE\"\necho \"WORKER:$WORKER_IDX\" >> \"$DONE_FILE\"\necho \"IPS:$IP_COUNT\" >> \"$DONE_FILE\"\necho \"FINDINGS:$(wc -l < \"$RESULTS_FILE\" 2>/dev/null | tr -d ' ')\" >> \"$DONE_FILE\"\n\n# Return results\nFINDINGS=$(wc -l < \"$RESULTS_FILE\" 2>/dev/null | tr -d ' ' || echo \"0\")\necho \"========================================\"\necho \"FILE:$RESULTS_FILE\"\necho \"FINDINGS:$FINDINGS\"\necho \"WORKER:$WORKER_IDX\"\necho \"MODE:ip-centric-waf-safe\""
+      },
+      "id": "run-nuclei",
+      "name": "Run Nuclei Scan",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        640,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "worker-index",
+              "name": "workerIndex",
+              "type": "number",
+              "value": "={{ $('Workflow Trigger').item.json.workerIndex }}"
+            },
+            {
+              "id": "ip-count",
+              "name": "ipCount",
+              "type": "number",
+              "value": "={{ $('Workflow Trigger').item.json.ipCount }}"
+            },
+            {
+              "id": "results-file",
+              "name": "resultsFile",
+              "type": "string",
+              "value": "=/tmp/phase3_results_{{ $('Workflow Trigger').item.json.timestamp }}_worker_{{ $('Workflow Trigger').item.json.workerIndex }}.jsonl"
+            },
+            {
+              "id": "targets-count",
+              "name": "targetsCount",
+              "type": "number",
+              "value": "={{ $('Workflow Trigger').item.json.count }}"
+            },
+            {
+              "id": "domain",
+              "name": "domain",
+              "type": "string",
+              "value": "={{ $('Workflow Trigger').item.json.domain }}"
+            },
+            {
+              "id": "timestamp",
+              "name": "timestamp",
+              "type": "string",
+              "value": "={{ $('Workflow Trigger').item.json.timestamp }}"
+            },
+            {
+              "id": "status",
+              "name": "status",
+              "type": "string",
+              "value": "completed"
+            },
+            {
+              "id": "mode",
+              "name": "mode",
+              "type": "string",
+              "value": "ip-centric-waf-safe"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "return-results",
+      "name": "Return Results",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        864,
+        304
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Write Target File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Target File": {
+      "main": [
+        [
+          {
+            "node": "Run Nuclei Scan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Nuclei Scan": {
+      "main": [
+        [
+          {
+            "node": "Return Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "384ba1b5-0b0c-460c-8f38-e9afb0e92088",
+  "meta": {
+    "instanceId": "3d65e600a9aeb19d6f05ce03e45f574014956a91db8dd7174a8b9335554e5aa3"
+  },
+  "id": "sCC4a3A0w8hYYqL9",
+  "tags": []
+}
