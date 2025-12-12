@@ -35,7 +35,7 @@ RECON_OUTPUT_DIR = "/tmp/recon"
 # Polling settings for waiting on results
 POLL_INTERVAL = 10  # seconds between checks
 PHASE2_TIMEOUT = 600  # 10 minutes max for Phase 2 (large domains)
-PHASE3_TIMEOUT = 900  # 15 minutes for parallel scan (much faster than sequential)
+PHASE3_TIMEOUT = 7200  # 2 hours for parallel scan (allows for long/deep scans)
 
 # ANSI Colors for terminal output
 class Colors:
@@ -416,9 +416,9 @@ def print_mode_menu():
     print(f"      Run vulnerability scanning later with option 3")
     print()
     print(f"  {Colors.CYAN}[3]{Colors.END} Vuln Scan Only (Phase 3 Parallel) {Colors.GREEN}[FAST]{Colors.END}")
-    print(f"      Tech-based nuclei scan with parallel workers")
+    print(f"      IP-based nuclei scan with 5 parallel workers")
     print(f"      Requires existing Phase 2 data")
-    print(f"      Time: ~10-15 min for 300 hosts")
+    print(f"      Time: ~10-120 min depending on target size")
     print()
 
 
@@ -494,7 +494,7 @@ def run_phase3_only():
             pass
 
     # Estimate time
-    estimated_time = "10-15 minutes" if host_count > 100 else "5-10 minutes"
+    estimated_time = "15-60 minutes" if host_count > 200 else "10-30 minutes"
 
     # Confirmation
     print()
@@ -666,7 +666,7 @@ def run_full_or_discovery(mode):
     if run_nuclei:
         print_step(4, "Starting Phase 3 (Parallel Nuclei Scanning)")
         print_info("Parallel workers scanning by tech stack...")
-        print_warning("This may take 10-15 minutes for large targets")
+        print_warning("This may take 15-60 minutes for large targets")
 
         success, result = trigger_phase3(domain)
 

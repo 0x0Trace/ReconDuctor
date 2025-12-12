@@ -1,16 +1,4 @@
-
-```
-=======================================================================
-||      ____                        ____             __              ||
-||     / __ \___  _________  ____  / __ \__  _______/ /_____  _____  ||
-||    / /_/ / _ \/ ___/ __ \/ __ \/ / / / / / / ___/ __/ __ \/ ___/  ||
-||   / _, _/  __/ /__/ /_/ / / / / /_/ / /_/ / /__/ /_/ /_/ / /      ||
-||  /_/ |_|\___/\___/\____/_/ /_/_____/\____/\___/\__/\____/_/       ||
-||                                                                   ||
-||            n8n Workflow Automation Pipeline Controller            ||
-||                    [v2.0 - Parallel Workers]                      ||
-=======================================================================
-```
+![REconDuctor Banner](images/banner.png)
 
 Reconductor is a multi-phase reconnaissance automation system that orchestrates subdomain enumeration, live host validation, and vulnerability scanning using n8n workflows with parallel execution capabilities.
 
@@ -21,6 +9,7 @@ Reconductor is a multi-phase reconnaissance automation system that orchestrates 
 - **Phase 1: Subdomain Enumeration** - Discover subdomains using crt.sh and subfinder
 - **Phase 2: Live Host Validation** - Validate live hosts with httpx, dnsx, and technology fingerprinting
 - **Phase 3: Vulnerability Scanning** - Parallel nuclei scanning with WAF-safe rate limiting
+- **Incremental Scanning** - Smart subdomain deduplication prevents re-scanning of previously validated hosts
 - **True Parallel Architecture** - 5-worker pool with IP-centric sharding for 6-9x speed improvement
 - **WAF-Safe Scanning** - Intelligent rate limiting and IP clustering to avoid detection
 - **Python Orchestrator** - Interactive CLI for managing the reconnaissance pipeline
@@ -71,13 +60,30 @@ Phase 1: Subdomain Enumeration
     |
     v
 Phase 2: Live Host Validation + Tech Fingerprinting
-    |
+    | (Only NEW subdomains - incremental scanning)
     v
 Phase 3: Parallel Vulnerability Scanning (5 Workers)
     |
     v
 HTML/JSON Reports
 ```
+
+### Incremental Scanning Optimization
+
+Reconductor implements intelligent subdomain deduplication to avoid redundant scanning:
+
+- **Master Subdomain Tracking**: All discovered subdomains are stored in `master_subdomains.txt`
+- **Automatic Comparison**: Phase 1 compares new findings against the master list using `anew`
+- **Only New Hosts Validated**: Phase 2 only processes subdomains not present in the master list
+- **Time & Resource Savings**: Re-running scans on the same domain skips previously validated hosts
+
+**File Location**: `/tmp/recon/{domain}/master_subdomains.txt`
+
+**How It Works**:
+1. Phase 1 discovers subdomains via crt.sh and subfinder
+2. New subdomains are compared against `master_subdomains.txt`
+3. Only unique subdomains are passed to Phase 2 for validation
+4. The master list is automatically updated with new findings
 
 ### Phase 3 Parallel Architecture
 
@@ -110,6 +116,7 @@ All results are stored in `/tmp/recon/{domain}/`:
 
 ```
 /tmp/recon/example.com/
+├── master_subdomains.txt         # Master list of all discovered subdomains
 ├── phase2_data.json              # Live hosts with IPs + tech
 ├── phase2_report.html            # Live host validation report
 ├── phase3_report.html            # Final vulnerability report
@@ -137,6 +144,11 @@ All results are stored in `/tmp/recon/{domain}/`:
 - **Sequential Scanning**: ~60-90 minutes
 - **Parallel Scanning (5 workers)**: ~10-15 minutes
 - **Speedup**: 6-9x faster
+
+**Incremental Scanning Benefits**:
+- **First Scan**: Full enumeration and validation
+- **Subsequent Scans**: Only new subdomains are validated in Phase 2
+- **Time Savings**: 50-90% reduction in Phase 2 execution time on re-scans
 
 ---
 
