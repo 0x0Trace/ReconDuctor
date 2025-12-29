@@ -83,7 +83,7 @@ Discover forgotten endpoints and parameters:
 
 *URLs categorized by type with parameter extraction and status codes*
 
-###Origin IP Discovery
+### Origin IP Discovery
 <img width="2063" height="758" alt="image" src="https://github.com/user-attachments/assets/e4c434da-5799-44ad-abc6-5aa860fe8f2e" />
 
 ## Scan Pipeline
