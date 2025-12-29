@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test script for the WordlistGeneratorAgent with fagi.gr domain."""
+"""Test script for the WordlistGeneratorAgent with example.com domain."""
 
 import asyncio
 import json
@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from reconductor.modules.ai.wordlist_agent import WordlistGeneratorAgent, generate_wordlist
 
 
-async def test_wordlist_generation(domain: str = "fagi.gr") -> dict:
+async def test_wordlist_generation(domain: str = "example.com") -> dict:
     """
     Test wordlist generation for a domain and return statistics.
 
