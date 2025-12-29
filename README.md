@@ -34,6 +34,7 @@ A comprehensive subdomain enumeration and vulnerability scanning framework with 
 - **Multi-source Subdomain Enumeration** - Passive and active discovery from 16+ sources
 - **Batched Vulnerability Scanning** - Checkpoint-based Nuclei scans with resume support
 - **Origin IP Discovery** - Find real IPs behind CDN/WAF using Shodan and SecurityTrails
+- **Origin IP Aggressive Scan** - Automatic Nuclei scan against origin IPs with WAF-bypass templates
 - **Port Scanning** - Discover web services on non-standard ports with naabu
 - **Screenshot Capture** - Automated screenshots of live hosts with gowitness
 - **Subdomain Takeover Detection** - Identify vulnerable CNAME records with subjack
@@ -160,6 +161,13 @@ Discover forgotten endpoints and parameters:
 │      • SSL Certificate CN matching (Shodan)                                 │
 │      • Favicon hash correlation (Shodan)                                    │
 │      • Historical DNS records (SecurityTrails)                              │
+│                                                                             │
+│  Origin IP Aggressive Scan (automatic when origins found)                   │
+│  └── Nuclei scan directly against origin IPs bypassing WAF:                 │
+│      • Uses Host header spoofing to reach target domain                     │
+│      • Aggressive templates: CVEs 2023-2025, RCE, LFI, SSRF, SQLi, XSS      │
+│      • Detects version disclosure hidden by CDN (nginx, PHP, etc.)          │
+│      • Higher rate limits (150 rps) - no CDN throttling                     │
 │  └── Discovered 64 NEW findings by bypassing WAF in real testing!           │
 │                                                                             │
 │  AI Vulnerability Triage (--ai-triage flag)                                 │
@@ -586,6 +594,13 @@ Find real IPs behind CDN/WAF protection using Shodan and SecurityTrails:
 - SSL Certificate CN matching (Shodan)
 - Favicon hash correlation (Shodan)
 - Historical DNS records (SecurityTrails)
+
+When origin IPs are discovered, ReconDuctor automatically runs an **aggressive Nuclei scan** directly against them:
+- **Host header spoofing** - Reaches target domain via origin IP
+- **Aggressive templates** - CVEs (2023-2025), RCE, LFI, SSRF, SQLi, XSS, default-logins
+- **Version detection** - Finds server versions hidden by CDN (nginx, PHP, Apache, etc.)
+- **Higher rate limits** - 150 rps since no CDN throttling
+- **Excludes dangerous tags** - No DoS, fuzzing, or brute-force templates
 
 **Real-world result:** In testing, origin IP bypass discovered **64 new findings** that were hidden behind WAF protection!
 
