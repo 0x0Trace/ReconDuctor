@@ -139,7 +139,6 @@ View all completed and in-progress scans:
 reconductor list-scans
 ```
 
-![List Scans](images/list-scans.png)
 
 Output columns:
 - **Domain** - Target domain
@@ -212,7 +211,6 @@ Generate executive-ready reports:
 reconductor scan target.com --ai-triage
 ```
 
-![AI Triage Report](images/ai-triage.png)
 
 The triage report includes:
 - **Prioritized Risk Items** - Grouped by actual risk, not just severity
@@ -371,7 +369,6 @@ arjun -i output/target.com/targets/live_urls.txt -w output/target.com/targets/al
 
 #### Main Report (`report.html`)
 
-![HTML Report](images/report.png)
 
 Contains:
 - Severity breakdown chart
@@ -382,7 +379,6 @@ Contains:
 
 #### GAU Findings (`gau_findings.html`)
 
-![GAU Results](images/gau-results.png)
 
 Contains:
 - Historical URLs categorized by type
@@ -603,13 +599,4 @@ echo $OPENAI_API_KEY
 
 ---
 
-## Screenshots to Add
 
-To complete the documentation, add these screenshots to `docs/images/`:
-
-1. **report.png** - Main HTML report showing severity breakdown and findings
-2. **ai-triage.png** - AI triage report with prioritized risk items
-3. **list-scans.png** - Output of `reconductor list-scans` command
-4. **gau-results.png** - GAU findings HTML showing categorized URLs
-
-Save screenshots at 1920x1080 or similar resolution for best documentation quality.
