@@ -1,0 +1,6 @@
+# This file ensures the images directory is tracked by git
+# Add your screenshots here:
+# - report.png (HTML report screenshot)
+# - ai-triage.png (AI triage report screenshot)
+# - list-scans.png (list-scans command output)
+# - gau-results.png (GAU historical URLs screenshot)

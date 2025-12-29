@@ -1,0 +1,162 @@
+# =============================================================================
+# ReconDuctor v2 - Example Configuration
+# =============================================================================
+# COPY THIS FILE: cp config/example.yaml config/local.yaml
+# NEVER COMMIT local.yaml - it's in .gitignore
+# See README.md for detailed configuration guide
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# General Settings
+# -----------------------------------------------------------------------------
+app_name: ReconDuctor
+debug: false
+log_level: INFO        # DEBUG, INFO, WARNING, ERROR
+log_json: false        # Set true for structured JSON logs
+
+# -----------------------------------------------------------------------------
+# Paths (relative to project root)
+# -----------------------------------------------------------------------------
+# base_dir: .
+# data_dir: ./data
+# wordlists_dir: ./wordlists
+# output_dir: ./output
+
+# -----------------------------------------------------------------------------
+# Scope Settings - Restrict scanning to authorized targets
+# -----------------------------------------------------------------------------
+# IMPORTANT: Always set scope to authorized targets only!
+scope:
+  allowed_domains: []           # e.g., ["example.com", "*.example.org"]
+  allowed_patterns: []          # Regex patterns for allowed domains
+  blocked_patterns:
+    - ".*\\.internal\\..*"
+    - ".*\\.local$"
+  allowed_asns: []              # e.g., ["AS12345"]
+  allowed_ip_ranges: []         # e.g., ["192.168.1.0/24"]
+
+# -----------------------------------------------------------------------------
+# Proxy Settings
+# -----------------------------------------------------------------------------
+proxy:
+  enabled: false
+  sources: []                   # List of proxy URLs
+  max_failures: 3
+  prefer_residential: true
+
+# -----------------------------------------------------------------------------
+# Rate Limiting - Adaptive WAF-aware throttling
+# -----------------------------------------------------------------------------
+rate_limit:
+  initial_rate: 30.0            # Starting requests/sec
+  min_rate: 1.0                 # Minimum when backing off
+  backoff_factor: 0.5           # Reduce by 50% on WAF detection
+  recovery_factor: 1.1          # Increase by 10% when stable
+
+# -----------------------------------------------------------------------------
+# Puredns Settings - DNS bruteforce configuration
+# -----------------------------------------------------------------------------
+puredns:
+  resolver_file: wordlists/resolvers.txt
+  wildcard_tests: 50
+  rate_limit: 500
+  trusted_resolvers:
+    - "8.8.8.8"
+    - "1.1.1.1"
+    - "9.9.9.9"
+
+# -----------------------------------------------------------------------------
+# Nuclei Settings - Vulnerability scanning
+# -----------------------------------------------------------------------------
+# WARNING: Removing exclusions may trigger IDS/WAF alerts
+# Only enable aggressive options with explicit authorization
+# -----------------------------------------------------------------------------
+nuclei:
+  # Severity levels to include
+  severity:
+    - critical
+    - high
+    - medium
+    # - low                     # Uncomment for thorough scans
+
+  # Tags to EXCLUDE (dangerous/noisy templates)
+  exclude_tags:
+    - fuzz                      # Fuzzing templates
+    - dos                       # Denial of service
+    - fuzzing                   # More fuzzing
+    - intrusive                 # Intrusive checks
+    - sqli                      # SQL injection (remove to enable)
+    - xss                       # Cross-site scripting (remove to enable)
+    - rce                       # Remote code execution (remove to enable)
+    - bruteforce                # Brute force attacks
+    - oob                       # Out-of-band testing
+    - oast                      # Out-of-band application security testing
+    - interactsh                # Interactsh callbacks
+
+  # Performance tuning
+  rate_limit: 150               # Requests per second
+  bulk_size: 25                 # Hosts per batch
+  concurrency: 25               # Parallel templates
+
+  # Disable external callback server (safer, but misses blind vulns)
+  disable_interactsh: true
+
+# -----------------------------------------------------------------------------
+# HTTP Client Settings
+# -----------------------------------------------------------------------------
+http:
+  primary_client: curl-impersonate
+  fallback_client: httpx
+  timeout: 10
+  retries: 2
+  browser_profiles:
+    - chrome120
+    - firefox121
+    - safari17_0
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+# -----------------------------------------------------------------------------
+# LLM Settings - AI-powered features
+# -----------------------------------------------------------------------------
+# Providers: ollama, openai, anthropic, gemini, groq, claude_code
+#
+# API KEYS - Set via environment variables (NEVER in config files):
+#   export OPENAI_API_KEY="sk-..."
+#   export ANTHROPIC_API_KEY="sk-ant-..."
+#   export GEMINI_API_KEY="..."
+#   export GROQ_API_KEY="..."
+#   export SHODAN_API_KEY="..."  (for origin IP discovery)
+#
+# Claude Code uses CLI authentication - no key needed
+# -----------------------------------------------------------------------------
+llm:
+  # Primary provider (tried first)
+  primary_provider: ollama      # Free, local, private
+  primary_model: llama3.2
+
+  # Fallback provider (if primary fails)
+  fallback_provider: openai
+  fallback_model: gpt-4o-mini
+
+  # Ollama API base URL (only used when provider is ollama)
+  api_base: http://localhost:11434
+
+  # Available models by provider:
+  # - ollama:      llama3.2, mistral, codellama, etc.
+  # - openai:      gpt-4o, gpt-4o-mini, gpt-4-turbo
+  # - anthropic:   claude-3-haiku-20240307, claude-3-sonnet-20240229
+  # - gemini:      gemini-1.5-flash, gemini-1.5-pro, gemini-2.0-flash-exp
+  # - groq:        llama-3.3-70b-versatile, mixtral-8x7b-32768
+  # - claude_code: sonnet, opus, haiku
+
+# -----------------------------------------------------------------------------
+# Worker Pool Settings
+# -----------------------------------------------------------------------------
+max_workers: 20
+min_workers: 3
+workers_per_cpu: 2
+
+# -----------------------------------------------------------------------------
+# IPv6 Settings
+# -----------------------------------------------------------------------------
+ipv6_prefix: 64                 # Options: 48, 56, 64
