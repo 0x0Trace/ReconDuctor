@@ -5,7 +5,7 @@
 </h1>
 <img width="945" height="185" alt="image" src="https://github.com/user-attachments/assets/e11bdf2b-4ab6-47c6-92ae-9587db513f41" />
 
-<h4 align="center">Field-ready Python reconnaissance tool for security professionals</h4>
+<h4 align="center">Python reconnaissance tool for security professionals</h4>
 
 <p align="center">
   <a href="#features">Features</a> |
@@ -55,28 +55,31 @@ A comprehensive subdomain enumeration and vulnerability scanning framework with 
 ### Scan Management
 Track all your scans with detailed statistics:
 
-![List Scans](docs/images/list-scans.png)
+<img width="1350" height="633" alt="image" src="https://github.com/user-attachments/assets/fb5168da-2684-436b-b5b4-0703c080979d" />
+
 
 *View all completed scans with subdomain counts, live hosts, findings, and scan dates*
 
 ### HTML Vulnerability Report
 Beautiful, interactive HTML reports with severity breakdown:
 
-![HTML Report](docs/images/report.png)
+<img width="1360" height="1080" alt="image" src="https://github.com/user-attachments/assets/c39d14d9-f980-4d79-870f-5f55aea10b9d" />
+
 
 *Findings organized by severity with CVSS scores, CVE references, remediation links, and tags*
 
 ### AI-Powered Triage
 Intelligent vulnerability analysis with business impact assessment:
 
-![AI Triage](docs/images/ai-triage.png)
+<img width="1044" height="1052" alt="image" src="https://github.com/user-attachments/assets/a29c2bfa-49e3-4134-a485-dc6528309767" />
+
 
 *Prioritized risk items with evidence, exploit details, business impact, attack chains, and remediation steps*
 
 ### Historical URL Discovery (GAU)
 Discover forgotten endpoints and parameters:
+<img width="1404" height="921" alt="image" src="https://github.com/user-attachments/assets/3a469199-3b8f-43a8-8026-af98cd187130" />
 
-![GAU Results](docs/images/gau-results.png)
 
 *URLs categorized by type with parameter extraction and status codes*
 
