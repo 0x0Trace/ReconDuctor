@@ -229,26 +229,26 @@ reconductor resume example.com
 ### Phase 1: Subdomain Enumeration
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    SUBDOMAIN ENUMERATION                     │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  1. Passive Enumeration (subfinder)                         │
-│     └─> 10+ sources: VirusTotal, Shodan, SecurityTrails...  │
-│                                                              │
-│  2. Certificate Transparency (crt.sh)                        │
-│     └─> SSL certificate logs                                 │
-│                                                              │
-│  3. DNS Brute-force (puredns)                               │
-│     └─> Wordlist + wildcard filtering                        │
-│                                                              │
-│  4. Permutation Generation (alterx)                          │
-│     └─> Pattern-based mutations: dev-api, api-v2, etc.      │
-│                                                              │
-│  5. AI Wordlist Generation (Ollama/OpenAI)                   │
-│     └─> Context-aware subdomain suggestions                  │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          SUBDOMAIN ENUMERATION                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. Passive Enumeration (subfinder)                                         │
+│     └── 10+ sources: VirusTotal, Shodan, SecurityTrails...                  │
+│                                                                             │
+│  2. Certificate Transparency (crt.sh)                                       │
+│     └── SSL certificate logs                                                │
+│                                                                             │
+│  3. DNS Brute-force (puredns)                                               │
+│     └── Wordlist + wildcard filtering                                       │
+│                                                                             │
+│  4. Permutation Generation (alterx)                                         │
+│     └── Pattern-based mutations: dev-api, api-v2, etc.                      │
+│                                                                             │
+│  5. AI Wordlist Generation (Ollama/OpenAI)                                  │
+│     └── Context-aware subdomain suggestions                                 │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Key Features:**
@@ -259,37 +259,37 @@ reconductor resume example.com
 ### Phase 2: Validation Pipeline
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    VALIDATION PIPELINE                       │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  1. DNS Resolution (dnsx)                                    │
-│     └─> A, AAAA, CNAME, MX, NS records                      │
-│     └─> Filters non-resolving subdomains                     │
-│                                                              │
-│  2. Port Scanning (naabu)                                    │
-│     └─> Common web ports: 80, 443, 8080, 8443...            │
-│     └─> Scope-validated targets only                         │
-│                                                              │
-│  PARALLEL EXECUTION:                                         │
-│  ├─> HTTP Probing (httpx)                                    │
-│  │   └─> Status codes, titles, technologies                  │
-│  │   └─> CDN detection, favicon hashing                      │
-│  │                                                           │
-│  ├─> Subdomain Takeover Detection (subjack)                  │
-│  │   └─> CNAME fingerprint matching                          │
-│  │   └─> Checks GitHub, Heroku, AWS, Azure, etc.            │
-│  │                                                           │
-│  └─> GAU Historical URL Mining (automatic)                   │
-│      └─> Mines: Wayback, OTX, URLScan                       │
-│      └─> Categorizes by vulnerability type                   │
-│      └─> Generates gau_findings.html                         │
-│                                                              │
-│  3. Screenshot Capture (gowitness)                           │
-│     └─> Captures screenshots of live hosts                   │
-│     └─> Generates screenshots_gallery.html                   │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            VALIDATION PIPELINE                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. DNS Resolution (dnsx)                                                   │
+│     ├── A, AAAA, CNAME, MX, NS records                                      │
+│     └── Filters non-resolving subdomains                                    │
+│                                                                             │
+│  2. Port Scanning (naabu)                                                   │
+│     ├── Common web ports: 80, 443, 8080, 8443...                            │
+│     └── Scope-validated targets only                                        │
+│                                                                             │
+│  PARALLEL EXECUTION:                                                        │
+│  ├── HTTP Probing (httpx)                                                   │
+│  │   ├── Status codes, titles, technologies                                 │
+│  │   └── CDN detection, favicon hashing                                     │
+│  │                                                                          │
+│  ├── Subdomain Takeover Detection (subjack)                                 │
+│  │   ├── CNAME fingerprint matching                                         │
+│  │   └── Checks GitHub, Heroku, AWS, Azure, etc.                            │
+│  │                                                                          │
+│  └── GAU Historical URL Mining (automatic)                                  │
+│      ├── Mines: Wayback, OTX, URLScan                                       │
+│      ├── Categorizes by vulnerability type                                  │
+│      └── Generates gau_findings.html                                        │
+│                                                                             │
+│  3. Screenshot Capture (gowitness)                                          │
+│     ├── Captures screenshots of live hosts                                  │
+│     └── Generates screenshots_gallery.html                                  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Key Features:**
@@ -301,23 +301,23 @@ reconductor resume example.com
 ### Phase 3: Vulnerability Scanning
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                   VULNERABILITY SCANNING                     │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  Nuclei Parallel Scanning                                    │
-│     └─> Dynamic worker pool (3-20 workers)                   │
-│     └─> IP clustering (same IPs grouped together)            │
-│     └─> Severity filtering: critical, high, medium           │
-│     └─> Excluded tags: fuzz, dos, intrusive, oob             │
-│     └─> Adaptive rate limiting                               │
-│                                                              │
-│  Smart Host Filtering                                        │
-│     └─> Skip 404 hosts (no content)                          │
-│     └─> Skip 5xx hosts (unreliable)                          │
-│     └─> Keep 401/403 hosts (auth bypass potential)           │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          VULNERABILITY SCANNING                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Nuclei Batched Scanning                                                    │
+│     ├── Checkpoint/resume support (recovers from interruption)              │
+│     ├── Smart host filtering (skip 404/500+ hosts)                          │
+│     ├── Severity filtering: critical, high, medium                          │
+│     ├── Excluded tags: fuzz, dos, intrusive, oob                            │
+│     └── Adaptive rate limiting                                              │
+│                                                                             │
+│  Smart Host Filtering                                                       │
+│     ├── Skip 404 hosts (no content)                                         │
+│     ├── Skip 5xx hosts (unreliable)                                         │
+│     └── Keep 401/403 hosts (auth bypass potential)                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Key Features:**
@@ -329,26 +329,34 @@ reconductor resume example.com
 ### Phase 4: Analysis
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                       ANALYSIS                               │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  1. Origin IP Discovery (Shodan)                            │
-│     └─> SSL Certificate CN matching                         │
-│     └─> Favicon hash correlation                            │
-│     └─> Finds real IPs behind CDN/WAF                       │
-│                                                              │
-│  2. AI Vulnerability Triage (--ai-triage flag)              │
-│     └─> Risk-prioritized analysis of findings               │
-│     └─> Attack chain identification                         │
-│     └─> Executive summary generation                        │
-│     └─> Remediation priorities                              │
-│     └─> AI-powered GAU URL filtering:                       │
-│         * Ranks by exploit likelihood (RCE > SSRF > LFI)    │
-│         * Deduplicates similar endpoints                    │
-│         * Validates if URLs still exist                     │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                ANALYSIS                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. Origin IP Discovery (Shodan + SecurityTrails)                           │
+│     ├── SSL Certificate CN matching (Shodan)                                │
+│     ├── Favicon hash correlation (Shodan)                                   │
+│     ├── Historical DNS records (SecurityTrails)                             │
+│     └── Finds real IPs behind CDN/WAF                                       │
+│                                                                             │
+│  2. Origin IP Aggressive Scan (automatic when origins found)                │
+│     ├── Nuclei scan directly against origin IPs bypassing WAF               │
+│     ├── Uses Host header spoofing to reach target domain                    │
+│     ├── Aggressive templates: CVEs 2023-2025, RCE, LFI, SSRF, SQLi, XSS     │
+│     ├── Detects version disclosure hidden by CDN (nginx, PHP, etc.)         │
+│     └── Higher rate limits (150 rps) - no CDN throttling                    │
+│                                                                             │
+│  3. AI Vulnerability Triage (--ai-triage flag)                              │
+│     ├── Risk-prioritized analysis of findings                               │
+│     ├── Attack chain identification                                         │
+│     ├── Executive summary generation                                        │
+│     ├── Remediation priorities                                              │
+│     └── AI-powered GAU URL filtering:                                       │
+│         • Ranks by exploit likelihood (RCE > SSRF > LFI)                    │
+│         • Deduplicates similar endpoints                                    │
+│         • Validates if URLs still exist                                     │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **URL Categorization (GAU - runs in Phase 2):**
