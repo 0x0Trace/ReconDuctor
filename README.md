@@ -31,7 +31,8 @@ A comprehensive subdomain enumeration and vulnerability scanning framework with 
 
 ### Core Capabilities
 - **Multi-source Subdomain Enumeration** - Passive and active discovery from 16+ sources
-- **Parallel Vulnerability Scanning** - Dynamic worker pool for fast Nuclei scans with IP clustering
+- **Batched Vulnerability Scanning** - Checkpoint-based Nuclei scans with resume support
+- **Origin IP Discovery** - Find real IPs behind CDN/WAF using Shodan and SecurityTrails
 - **Port Scanning** - Discover web services on non-standard ports with naabu
 - **Screenshot Capture** - Automated screenshots of live hosts with gowitness
 - **Subdomain Takeover Detection** - Identify vulnerable CNAME records with subjack
@@ -137,9 +138,9 @@ Discover forgotten endpoints and parameters:
 |  +-- Skip 500+ (Server Error) hosts - unreliable targets                   |
 |  +-- Keep 401/403 hosts - may have auth bypass vulnerabilities             |
 |                                                                             |
-|  Nuclei Parallel Scan                                                       |
-|  |-- Dynamic worker pool (based on unique IPs and CPU cores)               |
-|  |-- IP clustering (same IPs grouped to prevent WAF blocks)                |
+|  Nuclei Batched Scan                                                        |
+|  |-- Checkpoint/resume support (recovers from interruption)                |
+|  |-- Smart host filtering (skip 404/500+ hosts)                            |
 |  +-- Configurable severity filters (critical, high, medium)                |
 +-----------------------------------------------------------------------------+
                                     |
@@ -147,11 +148,11 @@ Discover forgotten endpoints and parameters:
 +-----------------------------------------------------------------------------+
 |                           PHASE 4: ANALYSIS                                 |
 +-----------------------------------------------------------------------------+
-|  Origin IP Discovery (Shodan) - POWERFUL!                                   |
-|  +-- Find real IPs behind Cloudflare/CDN using:                           |
-|      * SSL Certificate CN matching                                         |
-|      * Favicon hash correlation                                            |
-|      * Historical DNS records                                              |
+|  Origin IP Discovery (Shodan + SecurityTrails) - POWERFUL!                 |
+|  +-- Find real IPs behind Cloudflare/CDN using:                            |
+|      * SSL Certificate CN matching (Shodan)                                |
+|      * Favicon hash correlation (Shodan)                                   |
+|      * Historical DNS records (SecurityTrails)                             |
 |  +-- Discovered 64 NEW findings by bypassing WAF in real testing!          |
 |                                                                             |
 |  AI Vulnerability Triage (--ai-triage flag)                                 |
@@ -242,8 +243,9 @@ reconductor check-tools
 Set via environment variables - **NEVER put API keys in config files!**
 
 ```bash
-# For enhanced enumeration
+# For enhanced enumeration and origin IP discovery
 export SHODAN_API_KEY="your_shodan_api_key"
+export SECURITYTRAILS_API_KEY="your_securitytrails_api_key"
 
 # For AI features (choose one provider)
 export ANTHROPIC_API_KEY="sk-ant-..."      # Anthropic Claude
@@ -573,10 +575,10 @@ When enabled, Claude ranks GAU URLs by exploit likelihood:
 
 ### Origin IP Discovery
 
-Find real IPs behind CDN/WAF protection using Shodan:
-- SSL Certificate CN matching
-- Favicon hash correlation
-- Historical DNS records
+Find real IPs behind CDN/WAF protection using Shodan and SecurityTrails:
+- SSL Certificate CN matching (Shodan)
+- Favicon hash correlation (Shodan)
+- Historical DNS records (SecurityTrails)
 
 **Real-world result:** In testing, origin IP bypass discovered **64 new findings** that were hidden behind WAF protection!
 
@@ -710,6 +712,7 @@ GAU findings are automatically categorized by vulnerability type:
 | **Anthropic Claude** | AI features (wordlist, triage, GAU) | For AI features |
 | **crt.sh** | Certificate Transparency logs | No (free) |
 | **Shodan** | Subdomain enum, Origin IP discovery | Optional |
+| **SecurityTrails** | Historical DNS records for origin IP discovery | Optional |
 | **Wayback Machine** | Historical URLs (via GAU) | No (free) |
 | **CommonCrawl** | Historical URLs (via GAU) | No (free) |
 | **OTX** | Historical URLs (via GAU) | No (free) |
@@ -801,6 +804,88 @@ reconductor triage target.com
 
 # List all scans
 reconductor list-scans
+```
+
+## Sample Scan Output
+
+Example output from a real scan (domain sanitized):
+
+### Discovered Subdomains (`subdomains.txt`)
+```
+a.ns.example.com
+api.example.com
+b.ns.example.com
+design.example.com
+docs.example.com
+events.example.com
+go.example.com
+gslink.example.com
+example.com
+info.example.com
+links.example.com
+mta-sts.forwarding.example.com
+mta-sts.example.com
+support.example.com
+www.example.com
+```
+
+### Live Hosts (`live_hosts.txt`)
+```
+https://api.example.com
+https://docs.example.com
+https://gslink.example.com
+https://example.com
+https://mta-sts.forwarding.example.com
+https://mta-sts.example.com
+https://support.example.com
+https://www.example.com
+```
+
+### Scan Statistics (`scan_info.json`)
+```json
+{
+  "domain": "example.com",
+  "status": "completed",
+  "duration_seconds": 104.75,
+  "stats": {
+    "subdomains_discovered": 17,
+    "passive_total": 17,
+    "subfinder_count": 16,
+    "crtsh_count": 15,
+    "dns_resolved": 11,
+    "open_ports": 58,
+    "hosts_alive": 25,
+    "origin_ips_found": 5,
+    "screenshots_captured": 25,
+    "gau_total_urls": 83,
+    "gau_unique_urls": 37,
+    "gau_urls_with_params": 12
+  }
+}
+```
+
+### Battle Plan (`targets/next_steps.md`)
+```markdown
+# Next Steps - example.com
+
+## Priority Actions
+
+### 1. 💉 Test 7 SQLi Candidates
+URLs with id/user/order parameters - classic injection points.
+
+### 2. 🔨 Fuzz 12 URLs with Parameters
+cat targets/fuzz_urls.txt | qsreplace FUZZ | ffuf -u FUZZ -w payloads.txt
+
+### 3. 🔍 Content Discovery on 25 Live Hosts
+feroxbuster -L targets/live_urls.txt
+
+## Target Summary
+
+| Category         | Count | File                       |
+|------------------|-------|----------------------------|
+| URLs with params | 12    | targets/fuzz_urls.txt      |
+| SQLi candidates  | 7     | targets/sqli_candidates.txt|
+| Live hosts       | 25    | targets/live_urls.txt      |
 ```
 
 ## Tips
