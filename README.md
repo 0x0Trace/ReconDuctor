@@ -82,105 +82,105 @@ Discover forgotten endpoints and parameters:
 ## Scan Pipeline
 
 ```
-+-----------------------------------------------------------------------------+
-|                           PHASE 1: ENUMERATION                              |
-+-----------------------------------------------------------------------------+
-|  Passive Enumeration                                                        |
-|  |-- Subfinder (APIs: VirusTotal, SecurityTrails, etc.)                    |
-|  |-- crt.sh (Certificate Transparency logs)                                |
-|  +-- Shodan (SSL certificate CN extraction)                                |
-|                                                                             |
-|  AI Wordlist Generation (--ai flag)                                         |
-|  +-- Claude generates targeted prefixes based on:                          |
-|      * Historical subdomains from CT logs & Wayback Machine                |
-|      * Detected naming patterns and technologies                           |
-|      * Industry-specific conventions                                        |
-|                                                                             |
-|  Active Enumeration                                                         |
-|  |-- DNS Bruteforce (puredns + massdns)                                    |
-|  +-- Permutation Generation (alterx)                                       |
-+-----------------------------------------------------------------------------+
-                                    |
-                                    v
-+-----------------------------------------------------------------------------+
-|                          PHASE 2: VALIDATION                                |
-+-----------------------------------------------------------------------------+
-|  DNS Resolution                                                             |
-|  +-- Resolve all discovered subdomains to IP addresses                     |
-|                                                                             |
-|  Port Scanning (naabu)                                                      |
-|  +-- Scan 80+ common web ports to find services on non-standard ports      |
-|                                                                             |
-|  Runs in PARALLEL:                                                          |
-|  |                                                                          |
-|  |  HTTP Probing (httpx)                                                    |
-|  |  +-- Validate live hosts with status codes, titles, technologies        |
-|  |                                                                          |
-|  |  Subdomain Takeover Detection (subjack)                                  |
-|  |  +-- Check CNAME records against known vulnerable fingerprints          |
-|  |                                                                          |
-|  |  GAU Historical URL Mining (automatic)                                   |
-|  |  +-- Mine Wayback Machine, OTX, URLScan for historical URLs             |
-|  |  +-- Categorize by vulnerability type (SQLi, SSRF, LFI, XSS, RCE)       |
-|  |  +-- Generate gau_findings.html report                                  |
-|  |                                                                          |
-|  Screenshot Capture (gowitness)                                             |
-|  +-- Capture screenshots of all live hosts                                 |
-|  +-- Generate interactive gallery (screenshots_gallery.html)               |
-+-----------------------------------------------------------------------------+
-                                    |
-                                    v
-+-----------------------------------------------------------------------------+
-|                       PHASE 3: VULNERABILITY SCANNING                       |
-+-----------------------------------------------------------------------------+
-|  Smart Host Filtering                                                       |
-|  +-- Skip 404 (Not Found) hosts - no content to scan                       |
-|  +-- Skip 500+ (Server Error) hosts - unreliable targets                   |
-|  +-- Keep 401/403 hosts - may have auth bypass vulnerabilities             |
-|                                                                             |
-|  Nuclei Batched Scan                                                        |
-|  |-- Checkpoint/resume support (recovers from interruption)                |
-|  |-- Smart host filtering (skip 404/500+ hosts)                            |
-|  +-- Configurable severity filters (critical, high, medium)                |
-+-----------------------------------------------------------------------------+
-                                    |
-                                    v
-+-----------------------------------------------------------------------------+
-|                           PHASE 4: ANALYSIS                                 |
-+-----------------------------------------------------------------------------+
-|  Origin IP Discovery (Shodan + SecurityTrails) - POWERFUL!                 |
-|  +-- Find real IPs behind Cloudflare/CDN using:                            |
-|      * SSL Certificate CN matching (Shodan)                                |
-|      * Favicon hash correlation (Shodan)                                   |
-|      * Historical DNS records (SecurityTrails)                             |
-|  +-- Discovered 64 NEW findings by bypassing WAF in real testing!          |
-|                                                                             |
-|  AI Vulnerability Triage (--ai-triage flag)                                 |
-|  +-- Risk-prioritized analysis of all findings                             |
-|  +-- Attack chain identification                                           |
-|  +-- Executive summary generation                                          |
-|  +-- Remediation priorities                                                |
-|  +-- AI-powered GAU URL filtering:                                         |
-|      * Ranks URLs by exploit likelihood (RCE > SSRF > LFI > SQLi)         |
-|      * Deduplicates similar endpoints                                      |
-|      * Selects top high-value URLs for testing                             |
-+-----------------------------------------------------------------------------+
-                                    |
-                                    v
-+-----------------------------------------------------------------------------+
-|                              OUTPUT                                         |
-+-----------------------------------------------------------------------------+
-|  output/<domain>/                                                           |
-|  |-- scan_info.json           # Scan metadata and statistics               |
-|  |-- subdomains.txt           # All discovered subdomains                  |
-|  |-- hosts.json               # Live hosts with HTTP details               |
-|  |-- findings.json            # Nuclei vulnerability findings              |
-|  |-- report.html              # Main HTML report                           |
-|  |-- screenshots/             # Host screenshots (gowitness)               |
-|  |-- screenshots_gallery.html # Interactive screenshot gallery             |
-|  |-- gau_findings.html        # Historical URLs by category                |
-|  +-- triage_report.html       # AI triage analysis (if --ai-triage)        |
-+-----------------------------------------------------------------------------+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           PHASE 1: ENUMERATION                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Passive Enumeration                                                        │
+│  ├── Subfinder (APIs: VirusTotal, SecurityTrails, etc.)                     │
+│  ├── crt.sh (Certificate Transparency logs)                                 │
+│  └── Shodan (SSL certificate CN extraction)                                 │
+│                                                                             │
+│  AI Wordlist Generation (--ai flag)                                         │
+│  └── Claude generates targeted prefixes based on:                           │
+│      • Historical subdomains from CT logs & Wayback Machine                 │
+│      • Detected naming patterns and technologies                            │
+│      • Industry-specific conventions                                        │
+│                                                                             │
+│  Active Enumeration                                                         │
+│  ├── DNS Bruteforce (puredns + massdns)                                     │
+│  └── Permutation Generation (alterx)                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          PHASE 2: VALIDATION                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  DNS Resolution                                                             │
+│  └── Resolve all discovered subdomains to IP addresses                      │
+│                                                                             │
+│  Port Scanning (naabu)                                                      │
+│  └── Scan 80+ common web ports to find services on non-standard ports       │
+│                                                                             │
+│  Runs in PARALLEL:                                                          │
+│  │                                                                          │
+│  │  HTTP Probing (httpx)                                                    │
+│  │  └── Validate live hosts with status codes, titles, technologies         │
+│  │                                                                          │
+│  │  Subdomain Takeover Detection (subjack)                                  │
+│  │  └── Check CNAME records against known vulnerable fingerprints           │
+│  │                                                                          │
+│  │  GAU Historical URL Mining (automatic)                                   │
+│  │  ├── Mine Wayback Machine, OTX, URLScan for historical URLs              │
+│  │  ├── Categorize by vulnerability type (SQLi, SSRF, LFI, XSS, RCE)        │
+│  │  └── Generate gau_findings.html report                                   │
+│  │                                                                          │
+│  Screenshot Capture (gowitness)                                             │
+│  ├── Capture screenshots of all live hosts                                  │
+│  └── Generate interactive gallery (screenshots_gallery.html)                │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       PHASE 3: VULNERABILITY SCANNING                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Smart Host Filtering                                                       │
+│  ├── Skip 404 (Not Found) hosts - no content to scan                        │
+│  ├── Skip 500+ (Server Error) hosts - unreliable targets                    │
+│  └── Keep 401/403 hosts - may have auth bypass vulnerabilities              │
+│                                                                             │
+│  Nuclei Batched Scan                                                        │
+│  ├── Checkpoint/resume support (recovers from interruption)                 │
+│  ├── Smart host filtering (skip 404/500+ hosts)                             │
+│  └── Configurable severity filters (critical, high, medium)                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           PHASE 4: ANALYSIS                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  Origin IP Discovery (Shodan + SecurityTrails) - POWERFUL!                  │
+│  └── Find real IPs behind Cloudflare/CDN using:                             │
+│      • SSL Certificate CN matching (Shodan)                                 │
+│      • Favicon hash correlation (Shodan)                                    │
+│      • Historical DNS records (SecurityTrails)                              │
+│  └── Discovered 64 NEW findings by bypassing WAF in real testing!           │
+│                                                                             │
+│  AI Vulnerability Triage (--ai-triage flag)                                 │
+│  ├── Risk-prioritized analysis of all findings                              │
+│  ├── Attack chain identification                                            │
+│  ├── Executive summary generation                                           │
+│  ├── Remediation priorities                                                 │
+│  └── AI-powered GAU URL filtering:                                          │
+│      • Ranks URLs by exploit likelihood (RCE > SSRF > LFI > SQLi)           │
+│      • Deduplicates similar endpoints                                       │
+│      • Selects top high-value URLs for testing                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              OUTPUT                                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  output/<domain>/                                                           │
+│  ├── scan_info.json           # Scan metadata and statistics                │
+│  ├── subdomains.txt           # All discovered subdomains                   │
+│  ├── hosts.json               # Live hosts with HTTP details                │
+│  ├── findings.json            # Nuclei vulnerability findings               │
+│  ├── report.html              # Main HTML report                            │
+│  ├── screenshots/             # Host screenshots (gowitness)                │
+│  ├── screenshots_gallery.html # Interactive screenshot gallery              │
+│  ├── gau_findings.html        # Historical URLs by category                 │
+│  └── triage_report.html       # AI triage analysis (if --ai-triage)         │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Installation
