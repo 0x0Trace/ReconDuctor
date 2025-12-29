@@ -3,8 +3,9 @@
   ReconDuctor v2
   <br>
 </h1>
+<img width="945" height="185" alt="image" src="https://github.com/user-attachments/assets/e11bdf2b-4ab6-47c6-92ae-9587db513f41" />
 
-<h4 align="center">Field-ready Python reconnaissance powerhouse for security professionals</h4>
+<h4 align="center">Field-ready Python reconnaissance tool for security professionals</h4>
 
 <p align="center">
   <a href="#features">Features</a> |
